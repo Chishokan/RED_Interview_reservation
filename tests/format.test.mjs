@@ -4,7 +4,7 @@ import {
   formatDate, formatTime, formatDateTime, makeKey, formatJapaneseDate,
   zonedToEpochMs, todayStr, addDays, nowStamp,
 } from '../lib/format.js';
-import { buildMonthRequests } from '../lib/calendar-export.js';
+import { buildMonthLayout } from '../lib/calendar-export.js';
 
 let passed = 0;
 function test(name, fn) {
@@ -58,6 +58,15 @@ test('日時セルを読みやすい文字列にする(シリアル値でも数�
   assert.equal(formatDateTime(null), '');
 });
 
+test('DBのタイムスタンプ(UTCのISO文字列)を日本時間の表記にする', () => {
+  assert.equal(formatDateTime('2026-09-07T05:00:00+00:00'), '2026-09-07 14:00');
+  assert.equal(formatDateTime('2026-09-07T05:00:00.123Z'), '2026-09-07 14:00');
+  // 日本時間では翌日になる時刻
+  assert.equal(formatDateTime('2026-09-07T16:30:00Z'), '2026-09-08 01:30');
+  // すでに読める形の文字列はそのまま
+  assert.equal(formatDateTime('2026-09-07 14:00'), '2026-09-07 14:00');
+});
+
 console.log('\n== タイムゾーンの扱い(サーバーはUTCで動く) ==');
 
 test('日本時間の壁時計を正しい絶対時刻に変換する', () => {
@@ -85,26 +94,23 @@ console.log('\n== カレンダー出力のレイアウト ==');
 
 const school = { id: 'hirota', name: 'RED広田教室' };
 
-function cellsOf(requests) {
-  return requests.find(r => r.updateCells).updateCells.rows.map(r => r.values);
-}
+const cellsOf = (layout) => layout.rows;
 
 test('2026年9月(1日が火曜)のカレンダーが正しい位置に組まれる', () => {
   const byDate = { '2026-09-07': [{ time: '14:00', childName: '花子', grade: '小3' }] };
-  const reqs = buildMonthRequests(1, 2026, 9, school, byDate, '2026-09-01', '2026-09-30');
-  const rows = cellsOf(reqs);
+  const rows = cellsOf(buildMonthLayout(2026, 9, school, byDate, '2026-09-01', '2026-09-30'));
 
   // タイトルと曜日ヘッダー
-  assert.equal(rows[0][0].userEnteredValue.stringValue, 'RED広田教室  2026年9月  面談予約カレンダー');
-  assert.equal(rows[1][0].userEnteredValue.stringValue, '対象期間:2026-09-01 〜 2026-09-30');
-  assert.deepEqual(rows[2].map(c => c.userEnteredValue.stringValue), ['日','月','火','水','木','金','土']);
+  assert.equal(rows[0][0].value, 'RED広田教室  2026年9月  面談予約カレンダー');
+  assert.equal(rows[1][0].value, '対象期間:2026-09-01 〜 2026-09-30');
+  assert.deepEqual(rows[2].map(c => c.value), ['日','月','火','水','木','金','土']);
 
   // 2026-09-01 は火曜 → 4行目の3列目(index 2)
-  assert.equal(rows[3][2].userEnteredValue.numberValue, 1);
-  assert.equal(rows[3][0].userEnteredValue.stringValue, undefined); // 日曜は空
+  assert.equal(rows[3][2].value, 1);
+  assert.equal(rows[3][0].value, null); // 日曜は空
   // 9/7(月)は2週目の月曜。日付行は6行目(index 5)、内容行はその下
-  assert.equal(rows[5][1].userEnteredValue.numberValue, 7);
-  assert.equal(rows[6][1].userEnteredValue.stringValue, '14:00 花子(小3)');
+  assert.equal(rows[5][1].value, 7);
+  assert.equal(rows[6][1].value, '14:00 花子(小3)');
 });
 
 test('同じ日の複数予約が時刻順に改行で並ぶ', () => {
@@ -112,33 +118,33 @@ test('同じ日の複数予約が時刻順に改行で並ぶ', () => {
     { time: '10:00', childName: 'A', grade: '小1' },
     { time: '11:00', childName: 'B', grade: '' },
   ] };
-  const rows = cellsOf(buildMonthRequests(1, 2026, 9, school, byDate, '2026-09-01', '2026-09-30'));
-  assert.equal(rows[4][2].userEnteredValue.stringValue, '10:00 A(小1)\n11:00 B');
+  const rows = cellsOf(buildMonthLayout(2026, 9, school, byDate, '2026-09-01', '2026-09-30'));
+  assert.equal(rows[4][2].value, '10:00 A(小1)\n11:00 B');
 });
 
 test('期間外の日はグレーアウトされる', () => {
-  const rows = cellsOf(buildMonthRequests(1, 2026, 9, school, {}, '2026-09-10', '2026-09-20'));
+  const rows = cellsOf(buildMonthLayout(2026, 9, school, {}, '2026-09-10', '2026-09-20'));
   // 9/1(期間外)の日付セル
-  assert.deepEqual(rows[3][2].userEnteredFormat.backgroundColor, { red: 237/255, green: 242/255, blue: 247/255 });
+  assert.equal(rows[3][2].style.bg, '#EDF2F7');
+  assert.equal(rows[3][2].style.color, '#A0AEC0');
   // 9/10(期間内)の日付セル: 4行目の木曜(index 4)
-  assert.deepEqual(rows[5][4].userEnteredFormat.backgroundColor, { red: 247/255, green: 250/255, blue: 252/255 });
+  assert.equal(rows[5][4].style.bg, '#F7FAFC');
 });
 
 test('月末が土曜で終わる月(2026年10月)でも行数が破綻しない', () => {
-  const reqs = buildMonthRequests(1, 2026, 10, school, {}, '2026-10-01', '2026-10-31');
-  const rows = cellsOf(reqs);
-  const days = rows.flat().filter(c => c.userEnteredValue.numberValue !== undefined).map(c => c.userEnteredValue.numberValue);
+  const layout = buildMonthLayout(2026, 10, school, {}, '2026-10-01', '2026-10-31');
+  const days = layout.rows.flat().filter(c => typeof c.value === 'number').map(c => c.value);
   assert.deepEqual(days, Array.from({ length: 31 }, (_, i) => i + 1));
-  // 罫線・結合・固定行のリクエストが揃っている
-  assert.ok(reqs.some(r => r.updateBorders));
-  assert.equal(reqs.filter(r => r.mergeCells).length, 3);  // タイトル・期間・フッター
-  assert.ok(reqs.some(r => r.updateSheetProperties));
+  // タイトル・期間・フッターの3行が結合される
+  assert.equal(layout.merges.length, 3);
+  assert.ok(layout.footerRow > layout.lastRow);
+  assert.match(layout.rows[layout.footerRow - 1][0].value, /出力日時/);
 });
 
 test('すべての月で日付が1〜末日まで欠けずに配置される', () => {
   for (let m = 1; m <= 12; m++) {
-    const rows = cellsOf(buildMonthRequests(1, 2027, m, school, {}, `2027-${String(m).padStart(2,'0')}-01`, `2027-12-31`));
-    const days = rows.flat().filter(c => c.userEnteredValue.numberValue !== undefined).map(c => c.userEnteredValue.numberValue);
+    const rows = cellsOf(buildMonthLayout(2027, m, school, {}, `2027-${String(m).padStart(2,'0')}-01`, `2027-12-31`));
+    const days = rows.flat().filter(c => typeof c.value === 'number').map(c => c.value);
     const expected = new Date(Date.UTC(2027, m, 0)).getUTCDate();
     assert.equal(days.length, expected, `${m}月の日数`);
     assert.deepEqual(days, Array.from({ length: expected }, (_, i) => i + 1), `${m}月の並び`);

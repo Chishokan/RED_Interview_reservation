@@ -3,7 +3,7 @@
  *   GET    /api/admin/slots?schoolId=xxx   全ての枠
  *   POST   /api/admin/slots                { schoolId, slots: [...] } 枠を追加
  *   PATCH  /api/admin/slots                1件更新、または { action:'bulkCapacity' } で一括変更
- *   DELETE /api/admin/slots                { rowNum } 1件削除 / { rowNums } 一括削除
+ *   DELETE /api/admin/slots                { id } 1件削除 / { ids } 一括削除
  */
 import {
   getAllSlots,
@@ -40,7 +40,7 @@ export default withErrorHandling(async (req, res) => {
 
   if (req.method === 'DELETE') {
     const body = await readJsonBody(req);
-    if (Array.isArray(body.rowNums)) {
+    if (Array.isArray(body.ids)) {
       return res.status(200).json(await adminDeleteSlots(body));
     }
     return res.status(200).json(await adminDeleteSlot(body));

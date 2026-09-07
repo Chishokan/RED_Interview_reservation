@@ -1,6 +1,9 @@
 /**
  * POST /api/admin/export-calendar (要ログイン)
- * 指定期間の予約を月カレンダー形式のスプレッドシートに書き出す。
+ * 指定期間の予約を月カレンダー形式のExcelファイルにして返す。
+ *
+ * 成功時は .xlsx のバイナリを返し、失敗時はJSONでエラーを返す。
+ * 件数はレスポンスヘッダー X-Booking-Count で伝える。
  */
 import { exportCalendar } from '../../lib/calendar-export.js';
 import { requireAdmin } from '../../lib/auth.js';
@@ -10,5 +13,22 @@ export default withErrorHandling(async (req, res) => {
   noStore(res);
   if (!requireAdmin(req, res)) return;
   if (req.method !== 'POST') return methodNotAllowed(res, ['POST']);
-  res.status(200).json(await exportCalendar(await readJsonBody(req)));
+
+  const result = await exportCalendar(await readJsonBody(req));
+  if (!result.ok) return res.status(200).json(result);
+
+  // ファイル名に日本語が入るので RFC 5987 形式でも渡す
+  const encoded = encodeURIComponent(result.fileName);
+  res.setHeader(
+    'Content-Type',
+    'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+  );
+  res.setHeader(
+    'Content-Disposition',
+    `attachment; filename="calendar.xlsx"; filename*=UTF-8''${encoded}`
+  );
+  res.setHeader('X-Booking-Count', String(result.count));
+  res.setHeader('X-File-Name', encoded);
+  res.setHeader('Access-Control-Expose-Headers', 'X-Booking-Count, X-File-Name');
+  res.status(200).end(result.buffer);
 });

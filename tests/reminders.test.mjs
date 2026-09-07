@@ -1,14 +1,10 @@
 /** リマインドメールと新規予約通知のテスト(送信はResend APIをモックして捕捉する) */
 import assert from 'node:assert/strict';
-import { installFakes, resetStore, addSheet, dumpSheet } from './fake-sheets.js';
+import { fakeClient, resetDb, seedSchools, seedBookings, dump } from './fake-supabase.js';
 
-process.env.SPREADSHEET_ID = 'test-sheet';
-process.env.GOOGLE_SERVICE_ACCOUNT_EMAIL = 'x@y.iam.gserviceaccount.com';
-process.env.GOOGLE_PRIVATE_KEY = 'fake';
 process.env.TIMEZONE = 'Asia/Tokyo';
 process.env.RESEND_API_KEY = 'test-key';
 process.env.MAIL_FROM = '面談予約システム <noreply@example.com>';
-installFakes();
 
 // Resend への送信を捕捉する
 const sentMails = [];
@@ -21,30 +17,36 @@ globalThis.fetch = async (url, opts) => {
   return realFetch(url, opts);
 };
 
-const { SLOT_HEADERS, BOOKING_HEADERS, NOTIFY_HEADERS } = await import('../lib/schools.js');
+const { setDbForTesting } = await import('../lib/db.js');
+setDbForTesting(fakeClient);
+
+const { DEFAULT_SCHOOLS, clearSchoolCache } = await import('../lib/schools.js');
 const { todayStr, addDays } = await import('../lib/format.js');
-const { invalidateMetaCache } = await import('../lib/sheets.js');
 const { sendReminders, diagnoseReminders, notifyStaffNewBooking } = await import('../lib/notify.js');
 
-const BOOKINGS = 'RED広田教室予約データ';
 const TOMORROW = addDays(todayStr(), 1);
 const TODAY = todayStr();
 
-function row(id, date, email, status = 'confirmed', reminderSent = '') {
-  return [id, date, '14:00', '花子', '太郎', email, '小3', '', status, '', '', reminderSent, false, '', ''];
+function booking(id, over = {}) {
+  return {
+    id,
+    school_id: 'hirota',
+    date: TOMORROW,
+    time: '14:00',
+    child_name: '花子',
+    parent_name: '太郎',
+    email: 'a@x.jp',
+    grade: '小3',
+    ...over,
+  };
 }
 
-function setup(bookingRows = [], notifyRows = null) {
-  resetStore();
-  invalidateMetaCache();
+function setup(bookings = [], notify = {}) {
+  resetDb();
+  clearSchoolCache();
   sentMails.length = 0;
-  addSheet('RED広田教室予約枠', [SLOT_HEADERS]);
-  addSheet(BOOKINGS, [BOOKING_HEADERS, ...bookingRows]);
-  for (const n of ['RED京町教室', 'RED日野教室', 'RED佐々教室', 'RED西海大島教室', 'RED大野教室', 'ネクスタ']) {
-    addSheet(n + '予約枠', [SLOT_HEADERS]);
-    addSheet(n + '予約データ', [BOOKING_HEADERS]);
-  }
-  if (notifyRows) addSheet('通知先', [NOTIFY_HEADERS, ...notifyRows]);
+  seedSchools(DEFAULT_SCHOOLS.map((s) => ({ ...s, notify_email: notify[s.id] || '' })));
+  seedBookings(bookings);
 }
 
 let passed = 0;
@@ -56,7 +58,11 @@ async function test(name, fn) {
 console.log('\n== リマインドメール ==');
 
 await test('翌日の予約にだけ送信される', async () => {
-  setup([row('b1', TOMORROW, 'a@x.jp'), row('b2', TODAY, 'b@x.jp'), row('b3', addDays(TODAY, 5), 'c@x.jp')]);
+  setup([
+    booking('b1'),
+    booking('b2', { date: TODAY, email: 'b@x.jp' }),
+    booking('b3', { date: addDays(TODAY, 5), email: 'c@x.jp' }),
+  ]);
   const res = await sendReminders();
   assert.equal(res.sent, 1);
   assert.equal(sentMails.length, 1);
@@ -65,11 +71,10 @@ await test('翌日の予約にだけ送信される', async () => {
   assert.match(sentMails[0].text, /RED広田教室/);
 });
 
-await test('送信するとL列に日時が記録され、2回目は再送されない', async () => {
-  setup([row('b1', TOMORROW, 'a@x.jp')]);
+await test('送信すると記録が残り、2回目は再送されない', async () => {
+  setup([booking('b1')]);
   await sendReminders();
-  const stamp = dumpSheet(BOOKINGS)[1][11];
-  assert.match(String(stamp), /^\d{4}-\d{2}-\d{2} \d{2}:\d{2}$/);
+  assert.ok(dump('bookings')[0].reminder_sent_at);
   sentMails.length = 0;
   const second = await sendReminders();
   assert.equal(second.sent, 0);
@@ -77,27 +82,21 @@ await test('送信するとL列に日時が記録され、2回目は再送され
 });
 
 await test('キャンセル済み・メール未入力の予約は対象外', async () => {
-  setup([row('b1', TOMORROW, 'a@x.jp', 'cancelled'), row('b2', TOMORROW, '')]);
+  setup([booking('b1', { status: 'cancelled' }), booking('b2', { email: '' })]);
   const res = await sendReminders();
   assert.equal(res.sent, 0);
   assert.equal(sentMails.length, 0);
 });
 
 await test('全校舎を横断して送信する', async () => {
-  setup([row('b1', TOMORROW, 'a@x.jp')]);
-  const kyomachi = 'RED京町教室予約データ';
-  resetStore();
-  invalidateMetaCache();
-  sentMails.length = 0;
-  addSheet(BOOKINGS, [BOOKING_HEADERS, row('b1', TOMORROW, 'a@x.jp')]);
-  addSheet(kyomachi, [BOOKING_HEADERS, row('b2', TOMORROW, 'b@x.jp')]);
+  setup([booking('b1'), booking('b2', { school_id: 'nexta', email: 'b@x.jp' })]);
   const res = await sendReminders();
   assert.equal(res.sent, 2);
-  assert.deepEqual(sentMails.map(m => m.to[0]).sort(), ['a@x.jp', 'b@x.jp']);
+  assert.deepEqual(sentMails.map((m) => m.to[0]).sort(), ['a@x.jp', 'b@x.jp']);
 });
 
 await test('1件失敗しても他の送信は続く', async () => {
-  setup([row('b1', TOMORROW, 'boom@x.jp'), row('b2', TOMORROW, 'ok@x.jp')]);
+  setup([booking('b1', { email: 'boom@x.jp' }), booking('b2', { email: 'ok@x.jp' })]);
   const saved = globalThis.fetch;
   globalThis.fetch = async (url, opts) => {
     const body = JSON.parse(opts.body);
@@ -110,30 +109,32 @@ await test('1件失敗しても他の送信は続く', async () => {
   assert.equal(res.sent, 1);
   assert.equal(res.failed, 1);
   assert.equal(res.errors.length, 1);
-  // 失敗した予約には送信済みフラグが立たない(次回に拾える)
-  assert.equal(dumpSheet(BOOKINGS)[1][11], '');
+  // 失敗した予約には送信済みの記録が残らない(次回に拾える)
+  assert.equal(dump('bookings').find((b) => b.email === 'boom@x.jp').reminder_sent_at, null);
 });
 
 console.log('\n== リマインド診断 ==');
 await test('送信対象と除外理由を集計できる', async () => {
   setup([
-    row('b1', TOMORROW, 'a@x.jp'),
-    row('b2', TOMORROW, 'b@x.jp', 'cancelled'),
-    row('b3', TOMORROW, ''),
-    row('b4', TOMORROW, 'd@x.jp', 'confirmed', '2026-01-01 10:00'),
+    booking('b1'),
+    booking('b2', { status: 'cancelled', email: 'b@x.jp' }),
+    booking('b3', { email: '' }),
+    booking('b4', { email: 'd@x.jp', reminder_sent_at: '2026-01-01T01:00:00.000Z' }),
   ]);
   const d = await diagnoseReminders();
   assert.equal(d.tomorrow, TOMORROW);
   assert.equal(d.totalTarget, 4);
   assert.equal(d.totalWouldSend, 1);
-  const reasons = d.perSchool[0].bookings.map(b => b.reason);
-  assert.deepEqual(reasons, ['送信対象', 'キャンセル済', 'メール空欄', '送信済(2026-01-01 10:00)']);
+  const reasons = d.perSchool[0].bookings.map((b) => b.reason);
+  assert.deepEqual(reasons.sort(), [
+    'キャンセル済', 'メール空欄', '送信済(2026-01-01 10:00)', '送信対象',
+  ].sort());
   assert.equal(d.mailer, 'resend');
 });
 
 console.log('\n== 新規予約の担当者通知 ==');
-await test('「通知先」シートのアドレスへ送られる', async () => {
-  setup([], [['hirota', 'RED広田教室', 'staff@x.jp'], ['kyomachi', 'RED京町教室', '']]);
+await test('校舎に設定された通知先へ送られる', async () => {
+  setup([], { hirota: 'staff@x.jp' });
   await notifyStaffNewBooking({
     schoolId: 'hirota', schoolName: 'RED広田教室', date: TOMORROW, time: '14:00',
     childName: '花子', parentName: '太郎', email: 'p@x.jp', grade: '小3', note: '進路相談',
@@ -145,7 +146,7 @@ await test('「通知先」シートのアドレスへ送られる', async () =>
 });
 
 await test('通知先が空欄の校舎には送らない', async () => {
-  setup([], [['kyomachi', 'RED京町教室', '']]);
+  setup([], {});
   await notifyStaffNewBooking({
     schoolId: 'kyomachi', schoolName: 'RED京町教室', date: TOMORROW, time: '14:00',
     childName: '花子', parentName: '太郎', email: 'p@x.jp',
@@ -154,7 +155,7 @@ await test('通知先が空欄の校舎には送らない', async () => {
 });
 
 await test('カンマ区切りで複数の担当者に送れる', async () => {
-  setup([], [['hirota', 'RED広田教室', 'a@x.jp, b@x.jp']]);
+  setup([], { hirota: 'a@x.jp, b@x.jp' });
   await notifyStaffNewBooking({
     schoolId: 'hirota', schoolName: 'RED広田教室', date: TOMORROW, time: '14:00',
     childName: '花子', parentName: '太郎', email: 'p@x.jp',
@@ -163,7 +164,7 @@ await test('カンマ区切りで複数の担当者に送れる', async () => {
 });
 
 await test('通知の送信に失敗しても例外を投げない(予約処理を止めない)', async () => {
-  setup([], [['hirota', 'RED広田教室', 'a@x.jp']]);
+  setup([], { hirota: 'a@x.jp' });
   const saved = globalThis.fetch;
   globalThis.fetch = async () => ({ ok: false, status: 500, text: async () => 'boom' });
   const res = await notifyStaffNewBooking({

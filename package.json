@@ -3,17 +3,19 @@
   "version": "1.0.0",
   "private": true,
   "type": "module",
-  "description": "面談予約システム - Googleスプレッドシートをデータベースとして使うVercel版",
+  "description": "面談予約システム - Vercel + Supabase版",
   "scripts": {
     "dev": "vercel dev",
     "start": "vercel dev",
-    "test": "node tests/run-all.mjs"
+    "test": "node tests/run-all.mjs",
+    "import:xlsx": "node scripts/import-from-xlsx.mjs"
   },
   "engines": {
     "node": "22.x"
   },
   "dependencies": {
-    "googleapis": "^144.0.0",
+    "@supabase/supabase-js": "^2.47.10",
+    "exceljs": "^4.4.0",
     "nodemailer": "^6.9.16"
   }
 }

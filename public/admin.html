@@ -668,6 +668,26 @@
   .maint-card h4 { font-size: 14px; font-weight: 600; color: #2d3748; }
   .maint-card p { font-size: 12px; color: #718096; line-height: 1.6; flex: 1; }
   .maint-card .btn { align-self: flex-start; }
+  .notify-row {
+    display: grid; grid-template-columns: 200px 1fr;
+    gap: 10px; align-items: center;
+    padding: 6px 0; border-bottom: 1px solid #edf2f7;
+  }
+  .notify-row .notify-school {
+    font-size: 13px; font-weight: 600; color: #2d3748;
+  }
+  .notify-row input {
+    width: 100%; padding: 7px 10px;
+    border: 1px solid #cbd5e0; border-radius: 6px;
+    font-size: 13px; font-family: inherit;
+  }
+  .notify-row input:focus {
+    outline: none; border-color: #3182ce;
+    box-shadow: 0 0 0 2px rgba(49,130,206,0.12);
+  }
+  @media (max-width: 640px) {
+    .notify-row { grid-template-columns: 1fr; gap: 4px; }
+  }
   .maint-output {
     background: #1a202c; color: #e2e8f0;
     border-radius: 8px; padding: 14px;
@@ -900,24 +920,31 @@
     </div>
   </div>
 
-  <!-- システム設定タブ(GAS版のスプレッドシートメニューの代替) -->
+  <!-- システム設定タブ -->
   <div class="panel hidden" id="panel-maint">
     <p style="font-size:13px;color:#718096;margin-bottom:16px;">
-      GAS版でスプレッドシートのメニューから実行していた操作を、ここから実行できます。
+      新規予約の通知先の設定と、メンテナンス用の操作をここから行えます。
       いずれの操作も既存の予約データを消すことはありません。
     </p>
+    <h3 class="section-title">📧 新規予約の通知先</h3>
+    <p style="font-size:12px;color:#718096;margin-bottom:10px;">
+      新しい予約が入ったときに通知メールを送るアドレスです。空欄の校舎には通知されません。
+      カンマ区切りで複数のアドレスを指定できます。
+    </p>
+    <div id="notifyEditor">
+      <div class="loading"><span class="spinner"></span>読み込み中…</div>
+    </div>
+    <div style="display:flex; justify-content:flex-end; margin:10px 0 24px;">
+      <button class="btn btn-primary" id="saveNotifyBtn">通知先を保存</button>
+    </div>
+
+    <h3 class="section-title">🛠 メンテナンス操作</h3>
     <div class="maint-grid">
       <div class="maint-card">
-        <h4>🏗 シートの初期化・更新</h4>
-        <p>校舎ごとの「予約枠」「予約データ」シートを作成します。すでにある場合は、
-          不足している見出し列だけを補います(既存の予約は保持されます)。</p>
-        <button class="btn btn-primary" data-maint="init">実行する</button>
-      </div>
-      <div class="maint-card">
-        <h4>📧 通知先シートを作成</h4>
-        <p>新規予約の通知先メールアドレスを校舎ごとに設定するシートを用意します。
-          作成後、スプレッドシートのC列にアドレスを記入してください。</p>
-        <button class="btn btn-primary" data-maint="notifySheet">実行する</button>
+        <h4>🔌 接続とデータの確認</h4>
+        <p>データベースに接続できているか、メール送信の設定がどうなっているか、
+          登録件数はいくつかをまとめて確認します。</p>
+        <button class="btn btn-primary" data-maint="status">実行する</button>
       </div>
       <div class="maint-card">
         <h4>▶ 新規予約通知をテスト送信</h4>
@@ -952,7 +979,7 @@
     </div>
     <div class="modal-body">
       <p style="font-size:13px; color:#4a5568; margin-bottom:14px;">
-        指定した期間の予約を、月カレンダー形式のGoogleスプレッドシートに書き出します。
+        指定した期間の予約を、月カレンダー形式のExcelファイル(.xlsx)として書き出します。
         現在選択中の校舎(<strong id="exportSchoolName">―</strong>)の予約のみが対象です。
       </p>
       <div class="form-group">
@@ -965,21 +992,21 @@
       </div>
       <div id="exportNote" style="font-size:12px; color:#718096; background:#f7fafc; border-radius:4px; padding:8px 10px; margin-top:8px;">
         💡 期間が複数月にまたがる場合は、月ごとにシートが分かれて作成されます。<br>
-        💡 キャンセル済みの予約は含まれません。
+        💡 キャンセル済みの予約は含まれません。<br>
+        💡 ダウンロードしたファイルは Excel でも Googleスプレッドシート でも開けます。
       </div>
       <div id="exportError" style="display:none; color:#c53030; background:#fcebeb; border-radius:4px; padding:8px 10px; margin-top:10px; font-size:13px;"></div>
       <div id="exportProgress" style="display:none; margin-top:14px; text-align:center; color:#2c5282;">
         <span class="spinner"></span> 出力中です。少々お待ちください…
       </div>
       <div id="exportSuccess" style="display:none; margin-top:14px; padding:12px; background:#e6fffa; border:1px solid #38b2ac; border-radius:6px;">
-        <div style="font-weight:600; color:#234e52; margin-bottom:6px;">✅ 出力が完了しました</div>
-        <div style="font-size:12px; color:#234e52; margin-bottom:10px;" id="exportSuccessDetail"></div>
-        <a id="exportOpenLink" href="#" target="_blank" rel="noopener" class="btn btn-primary" style="text-decoration:none; display:inline-block;">スプレッドシートを開く</a>
+        <div style="font-weight:600; color:#234e52; margin-bottom:6px;">✅ ダウンロードしました</div>
+        <div style="font-size:12px; color:#234e52;" id="exportSuccessDetail"></div>
       </div>
     </div>
     <div class="modal-footer">
       <button class="btn btn-secondary" id="exportCancelBtn">閉じる</button>
-      <button class="btn btn-primary" id="exportRunBtn">出力する</button>
+      <button class="btn btn-primary" id="exportRunBtn">ダウンロード</button>
     </div>
   </div>
 </div>
@@ -1125,8 +1152,8 @@ async function apiCall(funcName, payload) {
     res = await fetch('/api/admin/bookings', json('DELETE', payload));
   } else if (funcName === 'updateBooking') {
     res = await fetch('/api/admin/bookings', json('PATCH', payload));
-  } else if (funcName === 'exportCalendar') {
-    res = await fetch('/api/admin/export-calendar', json('POST', payload));
+  } else if (funcName === 'getSettings') {
+    res = await fetch('/api/admin/setup');
   } else if (funcName === 'setup') {
     res = await fetch('/api/admin/setup', json('POST', payload));
   } else {
@@ -1583,18 +1610,18 @@ function renderSlots() {
       const opt2Cls = s.capacity === 2 ? 'opt active' : 'opt';
       const switchTitle = cannotReduce
         ? 'title="既に2名の予約があるため定員1にできません"' : '';
-      html += '<tr class="' + cls + '" data-row="' + s.rowNum + '">' +
+      html += '<tr class="' + cls + '" data-id="' + s.id + '">' +
         '<td><strong>' + s.time + '</strong></td>' +
         '<td>' + status + '</td>' +
         '<td class="capacity-cell-wrap">' +
-          '<div class="' + switchCls + '" data-cap="' + s.capacity + '" data-row="' + s.rowNum + '" ' + switchTitle + '>' +
+          '<div class="' + switchCls + '" data-cap="' + s.capacity + '" data-id="' + s.id + '" ' + switchTitle + '>' +
             '<span class="' + opt1Cls + '">1名</span>' +
             '<span class="' + opt2Cls + '">2名</span>' +
             '<div class="knob"></div>' +
           '</div>' +
         '</td>' +
-        '<td><button class="btn-toggle ' + toggleClass + '" data-row="' + s.rowNum + '" data-pub="' + s.published + '">' + toggleText + '</button></td>' +
-        '<td><button class="btn btn-danger btn-mini" data-action="del" data-row="' + s.rowNum + '">削除</button></td>' +
+        '<td><button class="btn-toggle ' + toggleClass + '" data-id="' + s.id + '" data-pub="' + s.published + '">' + toggleText + '</button></td>' +
+        '<td><button class="btn btn-danger btn-mini" data-action="del" data-id="' + s.id + '">削除</button></td>' +
       '</tr>';
     });
     html += '</tbody></table>';
@@ -1603,29 +1630,29 @@ function renderSlots() {
 
   container.querySelectorAll('.btn-toggle').forEach(btn => {
     btn.addEventListener('click', () => {
-      const rowNum = parseInt(btn.dataset.row);
+      const id = Number(btn.dataset.id);
       const newPub = btn.dataset.pub === 'false';
-      handleTogglePublish(rowNum, newPub);
+      handleTogglePublish(id, newPub);
     });
   });
   container.querySelectorAll('[data-action="del"]').forEach(btn => {
-    btn.addEventListener('click', () => handleDeleteSlot(parseInt(btn.dataset.row)));
+    btn.addEventListener('click', () => handleDeleteSlot(Number(btn.dataset.id)));
   });
   // 定員スイッチ
   container.querySelectorAll('.capacity-switch:not(.disabled)').forEach(sw => {
     sw.addEventListener('click', () => {
-      const rowNum = parseInt(sw.dataset.row);
+      const id = Number(sw.dataset.id);
       const curCap = parseInt(sw.dataset.cap);
       const newCap = curCap === 1 ? 2 : 1;
-      handleToggleCapacity(rowNum, newCap);
+      handleToggleCapacity(id, newCap);
     });
   });
 }
 
-async function handleToggleCapacity(rowNum, newCap) {
+async function handleToggleCapacity(id, newCap) {
   try {
     const res = await apiCall('updateSlot', {
-      schoolId: state.currentSchoolId, rowNum, capacity: newCap,
+      schoolId: state.currentSchoolId, id, capacity: newCap,
     });
     if (!res.ok) throw new Error(res.error);
     showToast('定員を ' + newCap + '名 に変更しました', 'success');
@@ -1633,17 +1660,17 @@ async function handleToggleCapacity(rowNum, newCap) {
   } catch (err) { showToast(err.message, 'error'); }
 }
 
-async function handleTogglePublish(rowNum, newPub) {
+async function handleTogglePublish(id, newPub) {
   try {
-    const res = await apiCall('updateSlot', { schoolId: state.currentSchoolId, rowNum, published: newPub });
+    const res = await apiCall('updateSlot', { schoolId: state.currentSchoolId, id, published: newPub });
     if (!res.ok) throw new Error(res.error);
     showToast(newPub ? '公開しました' : '非公開にしました', 'success');
     await loadSlots();
   } catch (err) { showToast(err.message, 'error'); }
 }
 
-async function handleDeleteSlot(rowNum) {
-  const slot = state.slots.find(s => s.rowNum === rowNum);
+async function handleDeleteSlot(id) {
+  const slot = state.slots.find(s => s.id === id);
   if (!slot) return;
   if (slot.booked > 0) {
     alert('この枠は予約が入っているため削除できません。\n先に予約をキャンセルしてください。');
@@ -1651,20 +1678,10 @@ async function handleDeleteSlot(rowNum) {
   }
   if (!confirm(formatDateLabel(slot.date) + ' ' + slot.time + ' の枠を削除しますか?')) return;
   try {
-    const res = await apiCall('deleteSlot', { schoolId: state.currentSchoolId, rowNum });
+    const res = await apiCall('deleteSlot', { schoolId: state.currentSchoolId, id });
     if (!res.ok) throw new Error(res.error);
     showToast('枠を削除しました', 'success');
     await loadSlots();
-  } catch (err) { showToast(err.message, 'error'); }
-}
-
-async function handleUpdateLabel(rowNum, label) {
-  try {
-    const res = await apiCall('updateSlot', { schoolId: state.currentSchoolId, rowNum, label });
-    if (!res.ok) throw new Error(res.error);
-    showToast('ラベルを更新しました', 'success');
-    const slot = state.slots.find(s => s.rowNum === rowNum);
-    if (slot) slot.label = label;
   } catch (err) { showToast(err.message, 'error'); }
 }
 
@@ -2035,16 +2052,16 @@ async function handleSelectDelete() {
     if (!confirm(empty.length + '個の枠を削除しますか?\nこの操作は元に戻せません。')) return;
   }
 
-  // 削除対象は「空き枠」のみ。rowNum を集めてサーバーへ
-  const rowNums = empty.map(s => s.rowNum).filter(n => n);
-  if (rowNums.length === 0) {
+  // 削除対象は「空き枠」のみ。枠IDを集めてサーバーへ
+  const ids = empty.map(s => s.id).filter(n => n !== undefined && n !== null);
+  if (ids.length === 0) {
     showToast('削除できる空き枠がありませんでした', 'error');
     return;
   }
   try {
     const res = await apiCall('deleteSlots', {
       schoolId: state.currentSchoolId,
-      rowNums: rowNums,
+      ids: ids,
     });
     if (!res.ok) throw new Error(res.error);
     let msg = res.deleted + '個の枠を削除しました';
@@ -2081,8 +2098,7 @@ async function handleSingleAdd() {
 
 // ========== システム設定(メンテナンス操作) ==========
 const MAINT_LABELS = {
-  init: 'シートの初期化・更新',
-  notifySheet: '通知先シートの作成',
+  status: '接続とデータの確認',
   testNotify: '通知テスト送信',
   diagnose: 'リマインドの診断',
   sendReminders: 'リマインドの手動送信',
@@ -2112,6 +2128,46 @@ async function handleMaint(action, btn) {
   }
 }
 
+// 通知先の一覧を読み込んで編集欄を作る
+async function loadNotifySettings() {
+  const box = document.getElementById('notifyEditor');
+  try {
+    const data = await apiCall('getSettings');
+    if (!data.ok) throw new Error(data.error);
+    box.innerHTML = (data.schools || []).map(s =>
+      '<div class="notify-row">' +
+        '<div class="notify-school">' + escapeHtml(s.name) + '</div>' +
+        '<input type="text" data-school="' + escapeHtml(s.id) + '" ' +
+          'placeholder="例: staff@example.com, sub@example.com" ' +
+          'value="' + escapeHtml(s.notifyEmail || '') + '">' +
+      '</div>'
+    ).join('');
+    if (!data.schools || data.schools.length === 0) {
+      box.innerHTML = '<div class="empty-msg">校舎が登録されていません。' +
+        'supabase/seed.sql を実行してください。</div>';
+    }
+  } catch (err) {
+    box.innerHTML = '<div class="empty-msg">読み込みエラー: ' + escapeHtml(err.message) + '</div>';
+  }
+}
+
+async function handleSaveNotify() {
+  const inputs = document.querySelectorAll('#notifyEditor input[data-school]');
+  if (!inputs.length) return;
+  const emails = Array.from(inputs).map(i => ({ schoolId: i.dataset.school, email: i.value.trim() }));
+  const btn = document.getElementById('saveNotifyBtn');
+  btn.disabled = true;
+  try {
+    const res = await apiCall('setup', { action: 'saveNotifyEmails', emails });
+    if (!res.ok) throw new Error(res.error);
+    showToast(res.message || '通知先を保存しました', 'success');
+  } catch (err) {
+    showToast(err.message, 'error');
+  } finally {
+    btn.disabled = false;
+  }
+}
+
 // ========== UI操作 ==========
 function switchTab(tabName) {
   document.querySelectorAll('.tab').forEach(t => {
@@ -2120,7 +2176,13 @@ function switchTab(tabName) {
   document.getElementById('panel-bookings').classList.toggle('hidden', tabName !== 'bookings');
   document.getElementById('panel-slots').classList.toggle('hidden', tabName !== 'slots');
   document.getElementById('panel-maint').classList.toggle('hidden', tabName !== 'maint');
+  // システム設定を開いたときに通知先を読み込む(1回だけ)
+  if (tabName === 'maint' && !notifyLoaded) {
+    notifyLoaded = true;
+    loadNotifySettings();
+  }
 }
+let notifyLoaded = false;
 
 function showToast(msg, kind) {
   const toast = document.getElementById('toast');
@@ -2312,6 +2374,7 @@ function doInit() {
   document.querySelectorAll('[data-maint]').forEach(btn => {
     btn.addEventListener('click', () => handleMaint(btn.dataset.maint, btn));
   });
+  document.getElementById('saveNotifyBtn').addEventListener('click', handleSaveNotify);
 }
 
 // ========== カレンダー出力 ==========
@@ -2343,7 +2406,7 @@ function openExportModal() {
   const runBtn = document.getElementById('exportRunBtn');
   runBtn.disabled = false;
   runBtn.style.display = '';
-  runBtn.textContent = '出力する';
+  runBtn.textContent = 'ダウンロード';
 
   document.getElementById('exportModal').classList.add('show');
 }
@@ -2374,28 +2437,57 @@ async function handleExportRun() {
   runBtn.disabled = true;
   runBtn.textContent = '出力中…';
   try {
-    const res = await apiCall('exportCalendar', {
-      schoolId: state.currentSchoolId,
-      startDate: startDate,
-      endDate: endDate,
+    const res = await fetch('/api/admin/export-calendar', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        schoolId: state.currentSchoolId,
+        startDate: startDate,
+        endDate: endDate,
+      }),
     });
-    if (!res.ok) throw new Error(res.error || '出力に失敗しました');
-    // 成功表示
+
+    // 失敗したときだけJSONでエラーが返ってくる
+    const contentType = res.headers.get('content-type') || '';
+    if (contentType.includes('application/json')) {
+      const data = await res.json();
+      if (res.status === 401 && data.needLogin) {
+        showLoginScreen();
+        throw new Error('セッションが切れました。もう一度ログインしてください。');
+      }
+      throw new Error(data.error || '出力に失敗しました');
+    }
+    if (!res.ok) throw new Error('出力に失敗しました (HTTP ' + res.status + ')');
+
+    const blob = await res.blob();
+    const count = res.headers.get('X-Booking-Count') || '?';
+    let fileName = 'calendar.xlsx';
+    const rawName = res.headers.get('X-File-Name');
+    if (rawName) {
+      try { fileName = decodeURIComponent(rawName); } catch (e) {}
+    }
+
+    // ブラウザにファイルとして保存させる
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = fileName;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    setTimeout(() => URL.revokeObjectURL(url), 10000);
+
     document.getElementById('exportProgress').style.display = 'none';
     document.getElementById('exportSuccessDetail').textContent =
-      '対象期間の予約 ' + res.count + '件 を書き出しました。' + (res.warning || '');
-    const link = document.getElementById('exportOpenLink');
-    link.href = res.url;
+      '対象期間の予約 ' + count + '件 を書き出しました。(' + fileName + ')';
     document.getElementById('exportSuccess').style.display = 'block';
-    runBtn.style.display = 'none';
-    // 自動で新規タブを開く
-    window.open(res.url, '_blank', 'noopener');
   } catch (err) {
     document.getElementById('exportProgress').style.display = 'none';
     errBox.textContent = err.message || '出力に失敗しました';
     errBox.style.display = 'block';
+  } finally {
     runBtn.disabled = false;
-    runBtn.textContent = '出力する';
+    runBtn.textContent = 'ダウンロード';
   }
 }
 

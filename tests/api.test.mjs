@@ -4,20 +4,18 @@
  */
 import assert from 'node:assert/strict';
 import http from 'node:http';
-import { installFakes, resetStore, addSheet, dumpSheet } from './fake-sheets.js';
+import { fakeClient, resetDb, seedSchools, seedSlots, seedBookings, dump } from './fake-supabase.js';
 
-process.env.SPREADSHEET_ID = 'test-sheet';
-process.env.GOOGLE_SERVICE_ACCOUNT_EMAIL = 'x@y.iam.gserviceaccount.com';
-process.env.GOOGLE_PRIVATE_KEY = 'fake';
 process.env.TIMEZONE = 'Asia/Tokyo';
 process.env.ADMIN_ID = 'staff';
 process.env.ADMIN_PASSWORD = 'pw123';
 process.env.SESSION_SECRET = 'test-secret';
-installFakes();
 
-const { SLOT_HEADERS, BOOKING_HEADERS } = await import('../lib/schools.js');
+const { setDbForTesting } = await import('../lib/db.js');
+setDbForTesting(fakeClient);
+
+const { DEFAULT_SCHOOLS, clearSchoolCache } = await import('../lib/schools.js');
 const { todayStr, addDays } = await import('../lib/format.js');
-const { invalidateMetaCache } = await import('../lib/sheets.js');
 
 const routes = {
   '/api/schools': (await import('../api/schools.js')).default,
@@ -27,6 +25,7 @@ const routes = {
   '/api/admin/slots': (await import('../api/admin/slots.js')).default,
   '/api/admin/bookings': (await import('../api/admin/bookings.js')).default,
   '/api/admin/setup': (await import('../api/admin/setup.js')).default,
+  '/api/admin/export-calendar': (await import('../api/admin/export-calendar.js')).default,
   '/api/cron/reminders': (await import('../api/cron/reminders.js')).default,
 };
 
@@ -35,7 +34,11 @@ const server = http.createServer(async (req, res) => {
   const url = new URL(req.url, 'http://localhost');
   const handler = routes[url.pathname];
   res.status = (code) => { res.statusCode = code; return res; };
-  res.json = (obj) => { res.setHeader('Content-Type', 'application/json'); res.end(JSON.stringify(obj)); return res; };
+  res.json = (obj) => {
+    res.setHeader('Content-Type', 'application/json');
+    res.end(JSON.stringify(obj));
+    return res;
+  };
   if (!handler) { res.status(404).json({ ok: false, error: 'not found' }); return; }
   req.query = Object.fromEntries(url.searchParams);
   await handler(req, res);
@@ -44,7 +47,7 @@ await new Promise((r) => server.listen(0, r));
 const base = `http://localhost:${server.address().port}`;
 
 let cookie = '';
-async function call(path, { method = 'GET', body, headers = {}, withCookie = true } = {}) {
+async function call(path, { method = 'GET', body, headers = {}, withCookie = true, raw = false } = {}) {
   const res = await fetch(base + path, {
     method,
     headers: {
@@ -56,22 +59,18 @@ async function call(path, { method = 'GET', body, headers = {}, withCookie = tru
   });
   const setCookie = res.headers.get('set-cookie');
   if (setCookie) cookie = setCookie.split(';')[0];
+  if (raw) return { status: res.status, res, buffer: Buffer.from(await res.arrayBuffer()) };
   return { status: res.status, data: await res.json() };
 }
 
-const SLOTS = 'RED広田教室予約枠';
-const BOOKINGS = 'RED広田教室予約データ';
 const D1 = addDays(todayStr(), 3);
 
-function setup(slotRows = [], bookingRows = []) {
-  resetStore();
-  invalidateMetaCache();
-  addSheet(SLOTS, [SLOT_HEADERS, ...slotRows]);
-  addSheet(BOOKINGS, [BOOKING_HEADERS, ...bookingRows]);
-  for (const n of ['RED京町教室', 'RED日野教室', 'RED佐々教室', 'RED西海大島教室', 'RED大野教室', 'ネクスタ']) {
-    addSheet(n + '予約枠', [SLOT_HEADERS]);
-    addSheet(n + '予約データ', [BOOKING_HEADERS]);
-  }
+function setup(slots = [], bookings = []) {
+  resetDb();
+  clearSchoolCache();
+  seedSchools(DEFAULT_SCHOOLS);
+  seedSlots(slots.map((s) => ({ school_id: 'hirota', ...s })));
+  seedBookings(bookings);
 }
 
 let passed = 0;
@@ -82,14 +81,17 @@ async function test(name, fn) {
 
 console.log('\n== 保護者向けAPI ==');
 await test('GET /api/schools が7校舎を返す', async () => {
+  setup();
   const { status, data } = await call('/api/schools');
   assert.equal(status, 200);
   assert.equal(data.schools.length, 7);
   assert.equal(data.schools[0].id, 'hirota');
+  // 通知先アドレスは保護者向けAPIに漏らさない
+  assert.equal(data.schools[0].notify_email, undefined);
 });
 
 await test('GET /api/slots が空き枠を返す', async () => {
-  setup([[D1, '14:00', '', true, 1]]);
+  setup([{ date: D1, time: '14:00' }]);
   const { data } = await call('/api/slots?schoolId=hirota');
   assert.equal(data.ok, true);
   assert.equal(data.slots.length, 1);
@@ -102,10 +104,13 @@ await test('GET /api/slots は校舎未指定なら400', async () => {
 });
 
 await test('POST /api/bookings で予約でき、GETで引ける', async () => {
-  setup([[D1, '14:00', '', true, 1]]);
+  setup([{ date: D1, time: '14:00' }]);
   const created = await call('/api/bookings', {
     method: 'POST',
-    body: { schoolId: 'hirota', email: 'p@x.jp', date: D1, time: '14:00', childName: '花子', parentName: '太郎', grade: '小3' },
+    body: {
+      schoolId: 'hirota', email: 'p@x.jp', date: D1, time: '14:00',
+      childName: '花子', parentName: '太郎', grade: '小3',
+    },
   });
   assert.equal(created.data.ok, true);
   const mine = await call('/api/bookings?email=p%40x.jp');
@@ -120,13 +125,15 @@ await test('未対応のメソッドは405を返す', async () => {
 
 console.log('\n== 管理APIの保護 ==');
 await test('未ログインでは管理APIが401を返す', async () => {
-  for (const path of ['/api/admin/slots?schoolId=hirota', '/api/admin/bookings?schoolId=hirota']) {
+  for (const path of ['/api/admin/slots?schoolId=hirota', '/api/admin/bookings?schoolId=hirota', '/api/admin/setup']) {
     const { status, data } = await call(path, { withCookie: false });
     assert.equal(status, 401, path);
     assert.equal(data.needLogin, true);
   }
-  const setupRes = await call('/api/admin/setup', { method: 'POST', body: { action: 'init' }, withCookie: false });
-  assert.equal(setupRes.status, 401);
+  const exp = await call('/api/admin/export-calendar', {
+    method: 'POST', body: { schoolId: 'hirota' }, withCookie: false,
+  });
+  assert.equal(exp.status, 401);
 });
 
 await test('パスワードが違うとログインできない', async () => {
@@ -151,109 +158,137 @@ await test('正しい資格情報でログインするとCookieが発行され�
 
 console.log('\n== 管理API(ログイン済み) ==');
 await test('GET /api/admin/slots が全枠を返す', async () => {
-  setup([[D1, '14:00', '', true, 1]]);
+  setup([{ date: D1, time: '14:00' }]);
   const { data } = await call('/api/admin/slots?schoolId=hirota');
   assert.equal(data.ok, true);
-  assert.equal(data.slots[0].rowNum, 2);
+  assert.ok(data.slots[0].id > 0);
 });
 
 await test('POST /api/admin/slots で枠を追加できる', async () => {
-  setup([]);
+  setup();
   const { data } = await call('/api/admin/slots', {
-    method: 'POST', body: { schoolId: 'hirota', slots: [{ date: D1, time: '10:00' }, { date: D1, time: '10:30' }] },
+    method: 'POST',
+    body: { schoolId: 'hirota', slots: [{ date: D1, time: '10:00' }, { date: D1, time: '10:30' }] },
   });
   assert.equal(data.added, 2);
-  assert.equal(dumpSheet(SLOTS).length, 3);
+  assert.equal(dump('slots').length, 2);
 });
 
 await test('PATCH /api/admin/slots で公開状態を変えられる', async () => {
-  setup([[D1, '14:00', '', true, 1]]);
+  setup([{ date: D1, time: '14:00' }]);
+  const id = dump('slots')[0].id;
   const { data } = await call('/api/admin/slots', {
-    method: 'PATCH', body: { schoolId: 'hirota', rowNum: 2, published: false },
+    method: 'PATCH', body: { schoolId: 'hirota', id, published: false },
   });
   assert.equal(data.ok, true);
-  assert.equal(dumpSheet(SLOTS)[1][3], false);
+  assert.equal(dump('slots')[0].published, false);
 });
 
 await test('PATCH /api/admin/slots の action=bulkCapacity で一括変更できる', async () => {
-  setup([[D1, '14:00', '', true, 1], [D1, '15:00', '', true, 1]]);
+  setup([{ date: D1, time: '14:00' }, { date: D1, time: '15:00' }]);
+  const ids = dump('slots').map((s) => s.id);
   const { data } = await call('/api/admin/slots', {
-    method: 'PATCH', body: { action: 'bulkCapacity', schoolId: 'hirota', rowNums: [2, 3], capacity: 2 },
+    method: 'PATCH', body: { action: 'bulkCapacity', schoolId: 'hirota', ids, capacity: 2 },
   });
   assert.equal(data.updated, 2);
-  assert.equal(dumpSheet(SLOTS)[1][4], 2);
+  assert.equal(dump('slots')[0].capacity, 2);
 });
 
 await test('DELETE /api/admin/slots は1件でも複数でも削除できる', async () => {
-  setup([[D1, '14:00', '', true, 1], [D1, '15:00', '', true, 1], [D1, '16:00', '', true, 1]]);
-  await call('/api/admin/slots', { method: 'DELETE', body: { schoolId: 'hirota', rowNum: 2 } });
-  assert.equal(dumpSheet(SLOTS).length, 3);
+  setup([{ date: D1, time: '14:00' }, { date: D1, time: '15:00' }, { date: D1, time: '16:00' }]);
+  const ids = dump('slots').map((s) => s.id);
+  await call('/api/admin/slots', { method: 'DELETE', body: { schoolId: 'hirota', id: ids[0] } });
+  assert.equal(dump('slots').length, 2);
   const { data } = await call('/api/admin/slots', {
-    method: 'DELETE', body: { schoolId: 'hirota', rowNums: [2, 3] },
+    method: 'DELETE', body: { schoolId: 'hirota', ids: [ids[1], ids[2]] },
   });
   assert.equal(data.deleted, 2);
-  assert.equal(dumpSheet(SLOTS).length, 1);
+  assert.equal(dump('slots').length, 0);
 });
 
 await test('PATCH /api/admin/bookings で面談記録を保存できる', async () => {
-  setup([], [['b1', D1, '14:00', 'A', 'PA', 'a@x.jp', '小1', '', 'confirmed', '', '', '', false, '', '']]);
+  setup([], [{
+    id: 'b1', school_id: 'hirota', date: D1, time: '14:00',
+    child_name: 'A', parent_name: 'PA', email: 'a@x.jp',
+  }]);
   const { data } = await call('/api/admin/bookings', {
     method: 'PATCH', body: { schoolId: 'hirota', id: 'b1', interviewDone: true, interviewNote: 'メモ' },
   });
   assert.equal(data.ok, true);
-  assert.equal(dumpSheet(BOOKINGS)[1][12], true);
+  assert.equal(dump('bookings')[0].interview_done, true);
 });
 
-await test('POST /api/admin/setup の init でシートを用意できる', async () => {
-  resetStore();
-  invalidateMetaCache();
-  const { data } = await call('/api/admin/setup', { method: 'POST', body: { action: 'init' } });
+console.log('\n== システム設定 ==');
+await test('GET /api/admin/setup が校舎と通知先を返す', async () => {
+  setup();
+  const { data } = await call('/api/admin/setup');
   assert.equal(data.ok, true);
-  assert.equal(data.created.length, 14); // 7校舎 × 2シート
-  assert.deepEqual(dumpSheet(SLOTS)[0], SLOT_HEADERS);
-  assert.deepEqual(dumpSheet(BOOKINGS)[0], BOOKING_HEADERS);
+  assert.equal(data.schools.length, 7);
+  assert.equal(data.schools[0].notifyEmail, '');
 });
 
-await test('init を2回実行しても既存データは消えない', async () => {
-  setup([[D1, '14:00', '', true, 1]], [['b1', D1, '14:00', 'A', 'PA', 'a@x.jp', '', '', 'confirmed', '', '', '', false, '', '']]);
-  const { data } = await call('/api/admin/setup', { method: 'POST', body: { action: 'init' } });
-  assert.equal(data.created.length, 0);
-  assert.equal(dumpSheet(SLOTS).length, 2);
-  assert.equal(dumpSheet(BOOKINGS)[1][0], 'b1');
+await test('通知先を保存できる', async () => {
+  setup();
+  const { data } = await call('/api/admin/setup', {
+    method: 'POST',
+    body: {
+      action: 'saveNotifyEmails',
+      emails: [
+        { schoolId: 'hirota', email: 'staff@x.jp' },
+        { schoolId: 'unknown', email: 'nope@x.jp' },   // 未知の校舎は無視される
+      ],
+    },
+  });
+  assert.equal(data.saved, 1);
+  assert.equal(dump('schools').find((s) => s.id === 'hirota').notify_email, 'staff@x.jp');
 });
 
-await test('GAS時代の古いシート(列が足りない)に見出しを補える', async () => {
-  // 職員メモ・リマインド送信済・面談記録の列がまだ無い、10列だけのシート
-  const oldHeaders = BOOKING_HEADERS.slice(0, 10);
-  resetStore();
-  invalidateMetaCache();
-  addSheet(SLOTS, [SLOT_HEADERS.slice(0, 4), [D1, '14:00', '', true]]);   // 定員列なし
-  addSheet(BOOKINGS, [oldHeaders, ['b1', D1, '14:00', 'A', 'PA', 'a@x.jp', '小1', '', 'confirmed', '2026-01-01 10:00']]);
-
-  const { data } = await call('/api/admin/setup', { method: 'POST', body: { action: 'init' } });
+await test('接続確認が件数を返す', async () => {
+  setup([{ date: D1, time: '14:00' }], [{
+    id: 'b1', school_id: 'hirota', date: D1, time: '14:00',
+    child_name: 'A', parent_name: 'PA', email: 'a@x.jp', status: 'cancelled',
+  }]);
+  const { data } = await call('/api/admin/setup', { method: 'POST', body: { action: 'status' } });
   assert.equal(data.ok, true);
-  assert.ok(data.headerUpdated.includes(BOOKINGS));
-  assert.ok(data.headerUpdated.includes(SLOTS));
-  // 見出しが15列すべて揃い、既存の予約データは残っている
-  assert.deepEqual(dumpSheet(BOOKINGS)[0], BOOKING_HEADERS);
-  assert.deepEqual(dumpSheet(SLOTS)[0], SLOT_HEADERS);
-  assert.equal(dumpSheet(BOOKINGS)[1][0], 'b1');
-  assert.equal(dumpSheet(BOOKINGS)[1][3], 'A');
-});
-
-await test('定員列が空の古い枠は定員1として扱われる', async () => {
-  resetStore();
-  invalidateMetaCache();
-  addSheet(SLOTS, [SLOT_HEADERS, [D1, '14:00', '', true]]);  // 定員セルが空
-  addSheet(BOOKINGS, [BOOKING_HEADERS]);
-  const { data } = await call('/api/slots?schoolId=hirota');
-  assert.equal(data.slots[0].capacity, 1);
-  assert.equal(data.slots[0].remaining, 1);
+  assert.equal(data.schools, 7);
+  assert.equal(data.slots, 1);
+  assert.equal(data.bookings, 1);
+  assert.equal(data.activeBookings, 0);
 });
 
 await test('不明な action は400を返す', async () => {
   const { status } = await call('/api/admin/setup', { method: 'POST', body: { action: 'nope' } });
   assert.equal(status, 400);
+});
+
+console.log('\n== カレンダー出力 ==');
+await test('Excelファイルがダウンロードできる', async () => {
+  setup([], [{
+    id: 'b1', school_id: 'hirota', date: D1, time: '14:00',
+    child_name: '花子', parent_name: '太郎', email: 'a@x.jp', grade: '小3',
+  }]);
+  const month = D1.slice(0, 7);
+  const { status, res, buffer } = await call('/api/admin/export-calendar', {
+    method: 'POST',
+    body: { schoolId: 'hirota', startDate: month + '-01', endDate: month + '-28' },
+    raw: true,
+  });
+  assert.equal(status, 200);
+  assert.match(res.headers.get('content-type'), /spreadsheetml\.sheet/);
+  assert.match(res.headers.get('content-disposition'), /attachment/);
+  assert.equal(res.headers.get('x-booking-count'), '1');
+  // xlsx は ZIP 形式なので PK で始まる
+  assert.equal(buffer.slice(0, 2).toString(), 'PK');
+  assert.ok(buffer.length > 1000);
+});
+
+await test('期間が逆ならJSONでエラーを返す', async () => {
+  setup();
+  const { data } = await call('/api/admin/export-calendar', {
+    method: 'POST', body: { schoolId: 'hirota', startDate: '2026-09-30', endDate: '2026-09-01' },
+  });
+  assert.equal(data.ok, false);
+  assert.match(data.error, /開始日が終了日より後/);
 });
 
 await test('ログアウトすると管理APIが再び401になる', async () => {
