@@ -111,6 +111,16 @@ npm run import:xlsx -- ./ダウンロードしたファイル.xlsx --dry-run   #
 npm run import:xlsx -- ./ダウンロードしたファイル.xlsx             # 実際に取り込む
 ```
 
+**接続情報を用意せずに移行したい場合**は、`--sql` でSQLファイルを書き出し、
+SupabaseのSQL Editorに貼り付けて実行することもできます。
+
+```bash
+npm run import:xlsx -- ./ダウンロードしたファイル.xlsx --sql ./migrate.sql
+```
+
+> ⚠️ 書き出したSQLには保護者・お子様の氏名やメールアドレスが含まれます。
+> Gitにコミットせず、実行後は削除してください。
+
 取り込まれるもの:
 
 - 「通知先」シート → 校舎マスタの通知先アドレス
@@ -189,7 +199,7 @@ tests/                   テスト(npm test)
 
 ```bash
 npm install
-npm test                 # 100件のテストを実行(Supabaseへの接続は不要)
+npm test                 # 107件のテストを実行(Supabaseへの接続は不要)
 
 # ローカルで動かす場合
 npm i -g vercel

@@ -9,7 +9,11 @@
  *  3. npm run import:xlsx -- ./ダウンロードしたファイル.xlsx
  *
  * 何度実行しても同じ結果になります(予約IDと枠の日時で重複を判定します)。
- * --dry-run を付けると、DBには書き込まず件数だけを表示します。
+ *
+ * 【オプション】
+ *  --dry-run        DBには書き込まず、件数だけを表示する
+ *  --sql <出力先>   DBに接続せず、SupabaseのSQL Editorに貼り付けられる
+ *                   SQLファイルを書き出す(接続情報が不要になります)
  */
 
 import fs from 'node:fs';
@@ -23,7 +27,13 @@ import { DEFAULT_SCHOOLS } from '../lib/schools.js';
 const isMain = process.argv[1] && process.argv[1].endsWith('import-from-xlsx.mjs');
 const args = process.argv.slice(2);
 const dryRun = args.includes('--dry-run');
-const filePath = args.find((a) => !a.startsWith('--'));
+const sqlIndex = args.indexOf('--sql');
+const sqlOut = sqlIndex >= 0 ? args[sqlIndex + 1] : null;
+// --sql の値は「取り込むファイル」ではないので、位置引数の候補から除く
+const positional = args.filter((a, i) => !a.startsWith('--') && i !== sqlIndex + 1);
+const filePath = positional[0];
+// SQLを書き出すだけならDBへの接続情報は要らない
+const needsDb = !dryRun && !sqlOut;
 
 let db = null;
 if (isMain) {
@@ -38,11 +48,12 @@ if (isMain) {
   loadEnvLocal();
   const url = process.env.SUPABASE_URL;
   const key = process.env.SUPABASE_SERVICE_ROLE_KEY;
-  if (!dryRun && (!url || !key)) {
+  if (needsDb && (!url || !key)) {
     console.error('SUPABASE_URL と SUPABASE_SERVICE_ROLE_KEY を .env.local に設定してください。');
+    console.error('(接続せずにSQLファイルを作るだけなら --sql <出力先> を使えます)');
     process.exit(1);
   }
-  if (!dryRun) db = createClient(url, key, { auth: { persistSession: false } });
+  if (needsDb) db = createClient(url, key, { auth: { persistSession: false } });
 }
 
 /** .env.local を読み込む(依存パッケージを増やさないための簡易実装) */
@@ -237,6 +248,95 @@ export function parseWorkbook(workbook) {
   return { schools, slots, bookings, perSchool, unknownSheets };
 }
 
+// ---------- SQLの書き出し ----------
+
+/** 値をSQLのリテラルにする(標準の文字列リテラル: シングルクォートを2つ重ねる) */
+function sqlLiteral(v) {
+  if (v === null || v === undefined) return 'null';
+  if (typeof v === 'boolean') return v ? 'true' : 'false';
+  if (typeof v === 'number') return String(v);
+  return "'" + String(v).replace(/'/g, "''") + "'";
+}
+
+/** insert文を組み立てる。行が多い場合は分割する */
+function buildInsert(table, columns, rows, conflictClause, chunkSize = 100) {
+  if (!rows.length) return '';
+  const out = [];
+  for (let i = 0; i < rows.length; i += chunkSize) {
+    const values = rows
+      .slice(i, i + chunkSize)
+      .map((r) => '  (' + columns.map((c) => sqlLiteral(r[c])).join(', ') + ')')
+      .join(',\n');
+    out.push(
+      `insert into public.${table} (${columns.join(', ')}) values\n${values}\n${conflictClause};`
+    );
+  }
+  return out.join('\n\n');
+}
+
+/**
+ * SupabaseのSQL Editorに貼り付けられるSQLを組み立てる。
+ * 予約IDと枠の日時で重複を判定するので、何度実行しても安全。
+ */
+export function buildSql(parsed) {
+  const header = [
+    '-- ============================================================',
+    '-- 既存データの移行用SQL(自動生成)',
+    '--',
+    '-- SupabaseのSQL Editorに貼り付けて実行してください。',
+    '-- 先に schema.sql を実行しておく必要があります。',
+    '-- 同じ予約・同じ日時の枠は二重に入らないので、何度実行しても安全です。',
+    `-- 校舎 ${parsed.schools.length}件 / 予約枠 ${parsed.slots.length}件 / 予約 ${parsed.bookings.length}件`,
+    '-- ============================================================',
+    '',
+    'begin;',
+    '',
+  ].join('\n');
+
+  const schools = buildInsert(
+    'schools',
+    ['id', 'name', 'sort_order', 'notify_email', 'active'],
+    parsed.schools,
+    'on conflict (id) do update set\n' +
+      '  name = excluded.name,\n' +
+      '  sort_order = excluded.sort_order,\n' +
+      '  notify_email = excluded.notify_email'
+  );
+
+  const slots = buildInsert(
+    'slots',
+    ['school_id', 'date', 'time', 'label', 'published', 'capacity'],
+    parsed.slots,
+    'on conflict (school_id, date, time) do nothing'
+  );
+
+  const bookings = buildInsert(
+    'bookings',
+    [
+      'id', 'school_id', 'date', 'time', 'child_name', 'parent_name', 'email',
+      'grade', 'note', 'status', 'created_at', 'staff_note', 'reminder_sent_at',
+      'interview_done', 'interview_note', 'interview_updated_at',
+    ],
+    parsed.bookings,
+    'on conflict (id) do nothing'
+  );
+
+  return [
+    header,
+    '-- ---------- 校舎マスタと通知先 ----------',
+    schools,
+    '',
+    '-- ---------- 予約枠 ----------',
+    slots,
+    '',
+    '-- ---------- 予約 ----------',
+    bookings,
+    '',
+    'commit;',
+    '',
+  ].join('\n');
+}
+
 // ---------- 本体 ----------
 async function main() {
   console.log(`読み込み中: ${filePath}${dryRun ? ' (--dry-run: DBには書き込みません)' : ''}\n`);
@@ -244,6 +344,11 @@ async function main() {
   await workbook.xlsx.readFile(filePath);
 
   const parsed = parseWorkbook(workbook);
+
+  if (sqlOut) {
+    fs.writeFileSync(sqlOut, buildSql(parsed), 'utf8');
+    console.log(`SQLを書き出しました: ${sqlOut}`);
+  }
 
   await insertInChunks('schools', parsed.schools, { onConflict: 'id' }, '校舎マスタ');
   await insertInChunks(
@@ -263,8 +368,13 @@ async function main() {
   if (parsed.unknownSheets.length) {
     console.log(`\n取り込まなかったシート: ${parsed.unknownSheets.join('、')}`);
   }
-  if (dryRun) console.log('\n--dry-run のため、DBには書き込んでいません。');
-  else console.log('\n完了しました。');
+  if (sqlOut) {
+    console.log(`\nSQLファイル(${sqlOut})をSupabaseのSQL Editorに貼り付けて実行してください。`);
+  } else if (dryRun) {
+    console.log('\n--dry-run のため、DBには書き込んでいません。');
+  } else {
+    console.log('\n完了しました。');
+  }
 }
 
 if (isMain) {

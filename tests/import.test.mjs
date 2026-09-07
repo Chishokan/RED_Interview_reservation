@@ -5,7 +5,7 @@
  */
 import assert from 'node:assert/strict';
 import ExcelJS from 'exceljs';
-import { parseWorkbook } from '../scripts/import-from-xlsx.mjs';
+import { parseWorkbook, buildSql } from '../scripts/import-from-xlsx.mjs';
 
 process.env.TIMEZONE = 'Asia/Tokyo';
 
@@ -61,6 +61,13 @@ function buildWorkbook() {
     '瀬戸山', d('2026-06-05'), true, '志望校…有田、波佐見', dt('2026-06-09', '18:18'),
   ]);
   bookings.addRow(['', d('2026-05-20'), t('14:00'), '無効行', '', '', '', '', '', '', '', '', '', '', '']);
+  // SQLのエスケープ確認用: アポストロフィ・改行・記号を含む行
+  bookings.addRow([
+    'b_quote_test', d('2026-05-21'), t('20:00'), "O'Brien 太郎", "O'Brien 花子",
+    "o'brien@example.com", '中学3年', "子ども曰く「'ちょっと'難しい」", 'confirmed',
+    dt('2026-06-03', '09:00'), "担当: O'Neil", '', true,
+    "① 面談メモ\n* 1行目 -- コメントではない\n* 2行目 'クォート' 入り", dt('2026-06-03', '10:00'),
+  ]);
 
   // 京町は枠シートだけ用意する(予約データシートが無い場合の確認)
   const kyo = wb.addWorksheet('RED京町教室予約枠');
@@ -152,7 +159,7 @@ test('キャンセル済みの予約は状態が保たれる', () => {
 });
 
 test('予約IDが無い行は取り込まれない', () => {
-  assert.equal(parsed.bookings.length, 2);
+  assert.equal(parsed.bookings.length, 3); // 有効な2件 + エスケープ確認用の1件
   assert.ok(!parsed.bookings.some((b) => b.child_name === '無効行'));
 });
 
@@ -163,6 +170,68 @@ test('シートが無い校舎と、関係のないシートを報告する', ()
   const nexta = parsed.perSchool.find((p) => p.school === 'ネクスタ');
   assert.deepEqual(nexta.missing, ['予約枠シートなし', '予約データシートなし']);
   assert.deepEqual(parsed.unknownSheets, ['メモ書き']);
+});
+
+console.log('\n== 移行用SQLの生成 ==');
+
+const sql = buildSql(parsed);
+
+test('スキーマの3テーブルすべてにinsertが作られる', () => {
+  assert.match(sql, /insert into public\.schools \(/);
+  assert.match(sql, /insert into public\.slots \(/);
+  assert.match(sql, /insert into public\.bookings \(/);
+  // トランザクションで囲む
+  assert.match(sql, /^-- =+\n/m);
+  assert.ok(sql.includes('begin;'));
+  assert.ok(sql.trimEnd().endsWith('commit;'));
+});
+
+test('再実行しても重複しないよう on conflict が付く', () => {
+  assert.match(sql, /on conflict \(id\) do update set/);
+  assert.match(sql, /on conflict \(school_id, date, time\) do nothing/);
+  assert.match(sql, /on conflict \(id\) do nothing/);
+});
+
+test("アポストロフィが '' にエスケープされる", () => {
+  // O'Brien → 'O''Brien 太郎'
+  assert.ok(sql.includes("'O''Brien 太郎'"), 'お子様名のエスケープ');
+  assert.ok(sql.includes("'O''Brien 花子'"), '保護者名のエスケープ');
+  assert.ok(sql.includes("'o''brien@example.com'"), 'メールアドレスのエスケープ');
+  assert.ok(sql.includes("'担当: O''Neil'"), '担当メモのエスケープ');
+  // エスケープ漏れが無いことを確認する。
+  // 文字列リテラルは改行をまたぐことがあるため、行単位ではなくSQL全体で数える。
+  const body = sql
+    .split('\n')
+    .filter((line) => !line.trim().startsWith('--'))
+    .join('\n');
+  const quotes = (body.match(/'/g) || []).length;
+  assert.equal(quotes % 2, 0, 'クォートの総数は偶数(すべて閉じている)はず');
+});
+
+test('改行や記号を含むテキストがそのまま保たれる', () => {
+  assert.ok(sql.includes('① 面談メモ'), '記号');
+  assert.ok(sql.includes("* 2行目 ''クォート'' 入り"), '改行の先の内容とエスケープ');
+});
+
+test('真偽値・NULL・数値がリテラルとして正しく出る', () => {
+  assert.match(sql, /, true, /);        // published / interview_done
+  assert.match(sql, /, null[,)]/);      // reminder_sent_at が未設定の行
+  assert.match(sql, /, 2\)/);           // 定員2の枠
+});
+
+test('日時はISO文字列として出力される', () => {
+  assert.match(sql, /'2026-06-03T00:00:00\.000Z'/);  // 09:00 JST
+});
+
+test('件数が解析結果と一致する', () => {
+  const count = (re) => (sql.match(re) || []).length;
+  // 1行 = 1レコード。値の行は「  (」で始まる
+  const valueLines = sql.split('\n').filter((l) => /^ {2}\(/.test(l)).length;
+  assert.equal(
+    valueLines,
+    parsed.schools.length + parsed.slots.length + parsed.bookings.length
+  );
+  assert.ok(count(/insert into/g) >= 3);
 });
 
 console.log(`\n${passed} 件のテストが通りました。`);
