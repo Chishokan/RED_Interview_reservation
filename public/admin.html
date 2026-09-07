@@ -1,0 +1,2405 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>面談予約 管理画面</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "Hiragino Sans", "Noto Sans JP", sans-serif;
+    background: #f5f7fa; color: #2d3748; line-height: 1.6; min-height: 100vh;
+  }
+  .container { max-width: 1100px; margin: 0 auto; padding: 24px 16px; }
+  header {
+    background: linear-gradient(135deg, #2c5282 0%, #3182ce 100%);
+    color: white; padding: 16px 0;
+  }
+  header .header-inner {
+    max-width: 1100px; margin: 0 auto; padding: 0 16px;
+    display: flex; justify-content: space-between; align-items: center;
+    flex-wrap: wrap; gap: 12px;
+  }
+  header h1 { font-size: 20px; font-weight: 600; }
+  header .badge {
+    background: #fef3c7; color: #744210; padding: 4px 10px;
+    border-radius: 4px; font-size: 11px; font-weight: 600;
+  }
+  .school-bar { background: white; border-bottom: 1px solid #e2e8f0; padding: 12px 0; }
+  .school-bar-inner {
+    max-width: 1100px; margin: 0 auto; padding: 0 16px;
+    display: flex; align-items: center; gap: 12px;
+  }
+  .school-bar label { font-size: 14px; font-weight: 600; color: #4a5568; }
+  .school-bar select {
+    flex: 1; max-width: 300px; padding: 8px 12px;
+    border: 1px solid #cbd5e0; border-radius: 6px;
+    font-size: 14px; background: white;
+  }
+  .school-bar button {
+    padding: 8px 16px; background: #edf2f7;
+    border: none; border-radius: 6px; cursor: pointer;
+    font-size: 13px; color: #2d3748;
+  }
+  .school-bar button:hover { background: #e2e8f0; }
+  .tabs { display: flex; gap: 4px; margin-bottom: 24px; border-bottom: 2px solid #e2e8f0; }
+  .tab {
+    padding: 12px 20px; background: none; border: none;
+    font-size: 14px; font-weight: 500; color: #718096;
+    cursor: pointer; border-bottom: 2px solid transparent; margin-bottom: -2px;
+  }
+  .tab:hover { color: #2d3748; }
+  .tab.active { color: #3182ce; border-bottom-color: #3182ce; }
+  .panel {
+    background: white; border-radius: 8px; padding: 24px;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.04); border: 1px solid #e2e8f0;
+    margin-bottom: 16px;
+  }
+  .panel.hidden { display: none; }
+  .hidden { display: none; }
+  .filter-bar {
+    display: flex; gap: 8px; margin-bottom: 16px; flex-wrap: wrap; align-items: center;
+  }
+  .filter-bar select, .filter-bar input {
+    padding: 8px 12px; border: 1px solid #cbd5e0;
+    border-radius: 6px; font-size: 14px;
+  }
+  .filter-bar .search { flex: 1; min-width: 200px; }
+  .filter-bar .stats { margin-left: auto; font-size: 13px; color: #718096; }
+  .booking-card {
+    background: white; border: 1px solid #e2e8f0;
+    border-radius: 8px; padding: 14px; margin-bottom: 8px;
+    display: grid; grid-template-columns: 130px 1fr auto;
+    gap: 12px; align-items: center;
+  }
+  .booking-card.past { opacity: 0.55; background: #f7fafc; }
+  .booking-card.cancelled { opacity: 0.45; background: #fff5f5; }
+  .booking-datetime { font-size: 15px; font-weight: 600; color: #1a202c; }
+  .booking-datetime .time { font-size: 18px; color: #3182ce; }
+  .booking-body { font-size: 13px; line-height: 1.5; }
+  .booking-body .name { font-size: 14px; font-weight: 600; color: #1a202c; }
+  .booking-body .grade { color: #718096; margin-left: 6px; font-size: 12px; }
+  .booking-body .parent { color: #4a5568; margin-top: 2px; }
+  .booking-body .email { color: #718096; font-size: 12px; }
+  .booking-body .note {
+    margin-top: 6px; padding: 6px 8px; background: #f7fafc;
+    border-radius: 4px; font-size: 12px; color: #4a5568;
+  }
+  .booking-actions { display: flex; flex-direction: column; gap: 4px; }
+  .booking-badge {
+    font-size: 10px; padding: 2px 6px; border-radius: 4px;
+    font-weight: 600; text-align: center; display: inline-block;
+  }
+  .badge-upcoming { background: #c6f6d5; color: #22543d; }
+  .badge-past { background: #e2e8f0; color: #4a5568; }
+  .badge-cancelled { background: #fed7d7; color: #742a2a; }
+  .slot-table {
+    width: 100%; border-collapse: collapse; font-size: 13px; margin-top: 8px;
+  }
+  .slot-table th {
+    background: #edf2f7; text-align: left; padding: 8px;
+    font-weight: 600; color: #4a5568; font-size: 12px;
+    border-bottom: 2px solid #cbd5e0;
+  }
+  .slot-table td { padding: 8px; border-bottom: 1px solid #e2e8f0; }
+  .slot-table tr.past { opacity: 0.5; }
+  .slot-table tr.booked { background: #fefcbf; }
+  .slot-table tr.unpublished { background: #f7fafc; opacity: 0.7; }
+  .slot-table .label-input {
+    width: 100%; padding: 4px; border: 1px solid #cbd5e0;
+    border-radius: 4px; font-size: 12px;
+  }
+  /* 定員スイッチ */
+  .capacity-switch {
+    position: relative;
+    display: inline-flex;
+    background: #edf2f7;
+    border: 1px solid #cbd5e0;
+    border-radius: 999px;
+    padding: 2px;
+    cursor: pointer;
+    user-select: none;
+    font-size: 11px;
+    font-weight: 600;
+    width: 78px;
+    height: 26px;
+    align-items: center;
+  }
+  .capacity-switch.disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+  }
+  .capacity-switch .opt {
+    flex: 1;
+    text-align: center;
+    z-index: 2;
+    color: #718096;
+    transition: color 0.2s;
+    padding: 0 4px;
+  }
+  .capacity-switch .opt.active {
+    color: white;
+  }
+  .capacity-switch .knob {
+    position: absolute;
+    top: 2px;
+    left: 2px;
+    width: calc(50% - 2px);
+    height: calc(100% - 4px);
+    background: #3182ce;
+    border-radius: 999px;
+    transition: transform 0.2s, background 0.2s;
+    z-index: 1;
+  }
+  .capacity-switch[data-cap="2"] .knob {
+    transform: translateX(100%);
+    background: #c05621;
+  }
+  .capacity-switch[data-cap="1"] .knob {
+    background: #4a5568;
+  }
+  .capacity-cell-wrap {
+    text-align: center;
+  }
+  .btn {
+    padding: 8px 14px; border-radius: 6px; font-size: 13px;
+    font-weight: 500; cursor: pointer; border: none;
+  }
+  .btn-primary { background: #3182ce; color: white; }
+  .btn-primary:hover { background: #2c5282; }
+  .btn-primary:disabled { background: #cbd5e0; cursor: not-allowed; }
+  .btn-secondary { background: #edf2f7; color: #2d3748; }
+  .btn-secondary:hover { background: #e2e8f0; }
+  .btn-danger { background: white; color: #e53e3e; border: 1px solid #fc8181; }
+  .btn-danger:hover { background: #fff5f5; }
+  .btn-mini { padding: 4px 8px; font-size: 11px; }
+  .btn-toggle {
+    padding: 4px 10px; font-size: 12px;
+    background: white; border: 1px solid #cbd5e0;
+    border-radius: 4px; cursor: pointer;
+  }
+  .btn-toggle.on { background: #c6f6d5; color: #22543d; border-color: #9ae6b4; }
+  .btn-toggle.off { background: #fed7d7; color: #742a2a; border-color: #fc8181; }
+  .add-form {
+    background: #f0fff4; border: 1px solid #9ae6b4;
+    border-radius: 8px; padding: 16px; margin-bottom: 16px;
+  }
+  .add-form h3 {
+    font-size: 14px; font-weight: 600; color: #22543d; margin-bottom: 12px;
+  }
+  .add-form-row {
+    display: grid; grid-template-columns: 1fr 1fr 1fr auto;
+    gap: 8px; align-items: end; margin-bottom: 8px;
+  }
+  .add-form label {
+    display: block; font-size: 12px; font-weight: 500;
+    margin-bottom: 4px; color: #2d3748;
+  }
+  .add-form input, .add-form select {
+    width: 100%; padding: 8px; border: 1px solid #cbd5e0;
+    border-radius: 4px; font-size: 13px; background: white;
+  }
+  /* 選択式追加用 */
+  .select-form {
+    background: #faf5ff; border: 1px solid #d6bcfa;
+    border-radius: 8px; padding: 16px; margin-bottom: 16px;
+  }
+  .select-form h3 {
+    font-size: 14px; font-weight: 600; color: #553c9a; margin-bottom: 12px;
+  }
+  .select-form-header {
+    display: grid; grid-template-columns: 1fr 1fr auto;
+    gap: 8px; align-items: end; margin-bottom: 12px;
+  }
+  .select-form label {
+    display: block; font-size: 12px; font-weight: 500;
+    margin-bottom: 4px; color: #2d3748;
+  }
+  .select-form input {
+    width: 100%; padding: 8px; border: 1px solid #cbd5e0;
+    border-radius: 4px; font-size: 13px; background: white;
+  }
+  .select-form .time-info {
+    font-size: 11px; color: #553c9a; background: white;
+    padding: 6px 10px; border-radius: 4px; margin-bottom: 10px;
+    border: 1px dashed #d6bcfa;
+  }
+  .select-quick-actions {
+    display: flex; gap: 6px; flex-wrap: wrap; margin-bottom: 10px;
+  }
+  .select-quick-actions button {
+    padding: 4px 10px; font-size: 11px;
+    background: white; border: 1px solid #d6bcfa;
+    border-radius: 4px; cursor: pointer; color: #553c9a;
+  }
+  .select-quick-actions button:hover { background: #faf5ff; }
+  .select-grid-wrapper {
+    background: white; border-radius: 6px;
+    padding: 10px; overflow-x: auto; margin-bottom: 10px;
+    max-height: 500px; overflow-y: auto;
+  }
+  .select-mode-toggle {
+    display: flex; align-items: center; gap: 10px;
+    margin-bottom: 10px;
+  }
+  .select-mode-label { font-size: 13px; font-weight: 600; color: #4a5568; }
+  .mode-switch {
+    display: inline-flex;
+    border: 1px solid #cbd5e0;
+    border-radius: 8px;
+    overflow: hidden;
+  }
+  .mode-btn {
+    padding: 6px 16px;
+    font-size: 13px;
+    font-weight: 600;
+    border: none;
+    background: white;
+    color: #718096;
+    cursor: pointer;
+    transition: all 0.15s;
+  }
+  .mode-btn:not(:last-child) { border-right: 1px solid #cbd5e0; }
+  .mode-btn.active {
+    background: #3182ce;
+    color: white;
+  }
+  .mode-btn:hover:not(.active) { background: #ebf8ff; }
+  /* 範囲選択の始点ハイライト */
+  .select-grid td.cell.range-start {
+    background: #f6ad55 !important;
+    color: white;
+    box-shadow: inset 0 0 0 2px #c05621;
+  }
+  .select-grid td.cell.range-start::before { content: '始'; font-size: 11px; }
+  /* 範囲選択(解除モード)の始点ハイライト */
+  .select-grid td.cell.range-start-remove {
+    background: #a0aec0 !important;
+    color: white;
+    box-shadow: inset 0 0 0 2px #4a5568;
+  }
+  .select-grid td.cell.range-start-remove::before { content: '始'; font-size: 11px; }
+
+  .select-grid {
+    border-collapse: separate;
+    border-spacing: 0;
+    font-size: 11px;
+    min-width: 100%;
+    user-select: none;
+    -webkit-user-select: none;
+    -webkit-touch-callout: none;
+  }
+  .select-grid th, .select-grid td {
+    padding: 0; border: 1px solid #e2e8f0;
+    text-align: center; min-width: 56px; height: 26px;
+  }
+  .select-grid th {
+    background: #edf2f7; position: sticky; top: 0; z-index: 2;
+    font-size: 10px; padding: 4px 2px; font-weight: 600;
+  }
+  .select-grid th.time-col {
+    background: #e2e8f0; left: 0; z-index: 3;
+    min-width: 60px; width: 60px;
+  }
+  .select-grid th.weekend { background: #fed7d7; color: #742a2a; }
+  .select-grid th.weekday { background: #ebf8ff; color: #2c5282; }
+  .select-grid td.time-cell {
+    background: #f7fafc; font-weight: 600; color: #4a5568;
+    position: sticky; left: 0; z-index: 1;
+    font-size: 10px;
+  }
+  .select-grid td.cell {
+    cursor: pointer; background: white;
+    transition: all 0.05s;
+  }
+  .select-grid td.cell:hover:not(.disabled) {
+    background: #ebf8ff;
+  }
+  .select-grid td.cell.selected {
+    background: #3182ce; color: white;
+    font-weight: 700;
+  }
+  .select-grid td.cell.selected::before { content: '✓'; font-size: 13px; }
+  .select-grid td.cell.disabled {
+    background: #f7fafc; color: #cbd5e0;
+    cursor: not-allowed;
+  }
+  .select-grid td.cell.outside {
+    background: #f7fafc;
+    cursor: not-allowed;
+    color: #cbd5e0;
+  }
+  .select-grid td.cell.existing {
+    background: #fefcbf; color: #744210;
+    cursor: not-allowed; font-size: 9px;
+  }
+  .select-grid td.cell.existing::before {
+    content: '済';
+  }
+  .select-grid td.cell.past {
+    background: #edf2f7;
+    cursor: not-allowed;
+    color: #a0aec0;
+  }
+  /* 削除モード: 既存枠を削除対象としてクリック可能に */
+  .select-grid td.cell.del-target {
+    cursor: pointer;
+  }
+  .select-grid td.cell.del-target:hover {
+    background: #f7c1c1;
+  }
+  .select-grid td.cell.selected-del {
+    background: #e24b4a !important; color: white;
+    font-weight: 700; font-size: 13px;
+  }
+  .select-grid td.cell.selected-del::before { content: '✓'; }
+  /* 削除モード時、空き枠(削除対象外)は薄く表示 */
+  .select-grid td.cell.empty-slot {
+    background: #fafafa;
+    cursor: not-allowed;
+    color: #e2e8f0;
+  }
+  /* 削除モードタブ */
+  .mode-btn-delete.active {
+    background: #c53030 !important;
+  }
+  .legend {
+    display: flex; gap: 12px; flex-wrap: wrap;
+    font-size: 11px; color: #4a5568; margin-bottom: 8px;
+  }
+  .legend-item {
+    display: flex; align-items: center; gap: 4px;
+  }
+  .legend-box {
+    width: 14px; height: 14px; border: 1px solid #e2e8f0;
+    border-radius: 2px; display: inline-block;
+  }
+  .empty-msg {
+    color: #718096; font-size: 14px; padding: 24px 16px;
+    text-align: center; background: #f7fafc; border-radius: 6px;
+  }
+  .loading { text-align: center; padding: 32px; color: #718096; }
+  .spinner {
+    display: inline-block; width: 20px; height: 20px;
+    border: 2px solid #e2e8f0; border-top-color: #3182ce;
+    border-radius: 50%; animation: spin 0.8s linear infinite;
+    vertical-align: middle; margin-right: 8px;
+  }
+  @keyframes spin { to { transform: rotate(360deg); } }
+  .toast {
+    position: fixed; bottom: 24px; right: 24px;
+    background: #1a202c; color: white; padding: 12px 20px;
+    border-radius: 8px; font-size: 14px;
+    box-shadow: 0 4px 12px rgba(0,0,0,0.2);
+    opacity: 0; transform: translateY(20px);
+    transition: all 0.3s; pointer-events: none;
+    z-index: 1000; max-width: 90%;
+  }
+  .toast.show { opacity: 1; transform: translateY(0); }
+  .toast.error { background: #c53030; }
+  .toast.success { background: #2f855a; }
+  .section-title {
+    font-size: 15px; font-weight: 600; color: #2d3748;
+    margin: 20px 0 10px; padding-bottom: 6px;
+    border-bottom: 1px solid #e2e8f0;
+  }
+  @media (max-width: 768px) {
+    .booking-card { grid-template-columns: 1fr; gap: 6px; }
+    .booking-actions { flex-direction: row; }
+    .add-form-row { grid-template-columns: 1fr; }
+    .select-form-header { grid-template-columns: 1fr; }
+  }
+  /* 一覧上のメモ欄 */
+  .staff-memo-wrap {
+    margin-top: 8px;
+    display: flex;
+    gap: 6px;
+    align-items: stretch;
+  }
+  .staff-memo-input {
+    flex: 1;
+    padding: 6px 8px;
+    border: 1px solid #fbd38d;
+    background: #fffbeb;
+    border-radius: 4px;
+    font-size: 12px;
+    font-family: inherit;
+    min-height: 36px;
+    resize: vertical;
+    line-height: 1.5;
+    color: #744210;
+  }
+  .staff-memo-input:focus {
+    outline: none;
+    border-color: #d69e2e;
+    background: #fffaf0;
+    box-shadow: 0 0 0 2px rgba(214,158,46,0.15);
+  }
+  .staff-memo-input::placeholder {
+    color: #b7791f;
+    opacity: 0.6;
+  }
+  .staff-memo-save {
+    flex-shrink: 0;
+    padding: 0 12px;
+    background: #d69e2e;
+    color: white;
+    border: none;
+    border-radius: 4px;
+    font-size: 12px;
+    font-weight: 600;
+    cursor: pointer;
+    white-space: nowrap;
+  }
+  .staff-memo-save:hover { background: #b7791f; }
+  .staff-memo-save:active { background: #975a16; }
+  .staff-memo-readonly {
+    margin-top: 8px;
+    padding: 6px 8px;
+    background: #fffbeb;
+    border-left: 3px solid #fbd38d;
+    border-radius: 4px;
+    font-size: 12px;
+    color: #744210;
+    line-height: 1.5;
+    white-space: pre-wrap;
+  }
+  @media (max-width: 480px) {
+    .staff-memo-wrap { flex-direction: column; }
+    .staff-memo-save { padding: 6px; }
+  }
+  /* 担当欄(縮小1行版) */
+  .staff-memo-compact .staff-memo-input-compact {
+    min-height: 30px;
+    height: 30px;
+    padding: 4px 8px;
+    font-size: 12px;
+  }
+  .staff-memo-compact .staff-memo-save {
+    padding: 0 10px;
+    font-size: 12px;
+  }
+  /* 面談記録欄(現在の職員メモと同程度のサイズ) */
+  .interview-wrap {
+    margin-top: 10px;
+    padding: 8px;
+    background: #f0fff4;
+    border: 1px solid #9ae6b4;
+    border-radius: 6px;
+  }
+  .interview-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 6px;
+    gap: 8px;
+    flex-wrap: wrap;
+  }
+  .interview-done {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 12px;
+    font-weight: 600;
+    color: #22543d;
+    cursor: pointer;
+    user-select: none;
+  }
+  .interview-done input[type="checkbox"] {
+    width: 16px;
+    height: 16px;
+    accent-color: #38a169;
+    cursor: pointer;
+  }
+  .interview-updated {
+    font-size: 11px;
+    color: #2f855a;
+    opacity: 0.85;
+  }
+  .interview-input {
+    width: 100%;
+    box-sizing: border-box;
+    padding: 6px 8px;
+    border: 1px solid #9ae6b4;
+    background: #ffffff;
+    border-radius: 4px;
+    font-size: 12px;
+    font-family: inherit;
+    line-height: 1.5;
+    resize: vertical;
+    color: #1a202c;
+  }
+  .interview-input:focus {
+    outline: none;
+    border-color: #38a169;
+    box-shadow: 0 0 0 2px rgba(56,161,105,0.18);
+  }
+  .interview-input::placeholder {
+    color: #38a169;
+    opacity: 0.55;
+  }
+  .interview-save {
+    margin-top: 6px;
+    padding: 5px 12px;
+    background: #38a169;
+    color: white;
+    border: none;
+    border-radius: 4px;
+    font-size: 12px;
+    font-weight: 600;
+    cursor: pointer;
+  }
+  .interview-save:hover { background: #2f855a; }
+  .interview-save:active { background: #276749; }
+  .interview-readonly {
+    margin-top: 10px;
+    padding: 8px;
+    background: #f0fff4;
+    border-left: 3px solid #9ae6b4;
+    border-radius: 4px;
+    font-size: 12px;
+    color: #22543d;
+    line-height: 1.5;
+  }
+  /* モーダル */
+  .modal-overlay {
+    position: fixed; top: 0; left: 0; right: 0; bottom: 0;
+    background: rgba(0,0,0,0.5);
+    display: none; align-items: center; justify-content: center;
+    z-index: 1000; padding: 16px;
+  }
+  .modal-overlay.show { display: flex; }
+  .modal {
+    background: white; border-radius: 10px;
+    max-width: 560px; width: 100%;
+    max-height: 90vh; overflow-y: auto;
+  }
+  .modal-header {
+    padding: 14px 18px; background: #3182ce; color: white;
+    border-radius: 10px 10px 0 0;
+    display: flex; justify-content: space-between; align-items: center;
+    position: sticky; top: 0; z-index: 2;
+  }
+  .modal-header h3 { font-size: 15px; font-weight: 600; }
+  .modal-close {
+    background: rgba(255,255,255,0.2); color: white;
+    border: none; width: 28px; height: 28px;
+    border-radius: 50%; cursor: pointer; font-size: 18px;
+    line-height: 1;
+  }
+  .modal-close:hover { background: rgba(255,255,255,0.3); }
+  .modal-body { padding: 18px; }
+  .modal-body .form-group { margin-bottom: 14px; }
+  .modal-body .form-group label {
+    display: block; font-size: 12px; font-weight: 600;
+    color: #4a5568; margin-bottom: 4px;
+  }
+  .modal-body .form-group input {
+    width: 100%; padding: 8px 10px;
+    border: 1px solid #cbd5e0; border-radius: 6px;
+    font-size: 13px; font-family: inherit;
+  }
+  .modal-section { margin-bottom: 18px; }
+  .modal-section h4 {
+    font-size: 13px; font-weight: 600;
+    color: #4a5568; margin-bottom: 8px;
+    padding-bottom: 4px; border-bottom: 2px solid #e2e8f0;
+  }
+  .modal-info-row {
+    display: grid; grid-template-columns: 80px 1fr;
+    gap: 8px; font-size: 13px; padding: 4px 0;
+  }
+  .modal-info-row .label { color: #718096; font-size: 12px; }
+  .modal-info-row .value { color: #1a202c; }
+  .modal-info-row .value.cancelled { color: #c53030; font-weight: 600; }
+  .modal-info-row .value.upcoming { color: #22543d; font-weight: 600; }
+  .modal-input {
+    width: 100%; padding: 8px 10px;
+    border: 1px solid #cbd5e0; border-radius: 6px;
+    font-size: 13px; font-family: inherit;
+    background: white;
+  }
+  .modal-textarea {
+    width: 100%; padding: 8px 10px;
+    border: 1px solid #cbd5e0; border-radius: 6px;
+    font-size: 13px; font-family: inherit;
+    background: #fffbeb; min-height: 80px; resize: vertical;
+  }
+  .modal-textarea:focus { outline: none; border-color: #d69e2e; background: white; }
+  .modal-reschedule {
+    background: #f7fafc; padding: 12px; border-radius: 6px;
+    border: 1px solid #e2e8f0;
+  }
+  .modal-reschedule-row {
+    display: grid; grid-template-columns: 1fr 1fr auto;
+    gap: 8px; align-items: end;
+  }
+  .modal-reschedule label {
+    display: block; font-size: 11px; color: #718096; margin-bottom: 3px;
+  }
+  .modal-reschedule input {
+    width: 100%; padding: 6px 8px;
+    border: 1px solid #cbd5e0; border-radius: 4px; font-size: 13px;
+  }
+  .modal-actions, .modal-footer {
+    display: flex; gap: 8px; justify-content: flex-end;
+    padding: 14px 18px; background: #f7fafc;
+    border-top: 1px solid #e2e8f0;
+    border-radius: 0 0 10px 10px;
+    flex-wrap: wrap;
+  }
+  .modal-actions .btn-flex { flex: 1; min-width: 80px; }
+  .modal-hint {
+    font-size: 11px; color: #718096; margin-top: 4px;
+  }
+  @media (max-width: 480px) {
+    .modal-reschedule-row { grid-template-columns: 1fr; }
+  }
+  /* システム設定タブ */
+  .maint-grid {
+    display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+    gap: 12px; margin-bottom: 16px;
+  }
+  .maint-card {
+    border: 1px solid #e2e8f0; border-radius: 8px;
+    padding: 14px; background: #f7fafc;
+    display: flex; flex-direction: column; gap: 8px;
+  }
+  .maint-card h4 { font-size: 14px; font-weight: 600; color: #2d3748; }
+  .maint-card p { font-size: 12px; color: #718096; line-height: 1.6; flex: 1; }
+  .maint-card .btn { align-self: flex-start; }
+  .maint-output {
+    background: #1a202c; color: #e2e8f0;
+    border-radius: 8px; padding: 14px;
+    font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+    font-size: 12px; line-height: 1.6;
+    white-space: pre-wrap; word-break: break-all;
+    max-height: 420px; overflow-y: auto;
+  }
+  /* ログイン画面 */
+  .login-overlay {
+    position: fixed; top: 0; left: 0; right: 0; bottom: 0;
+    background: linear-gradient(135deg, #2c5282 0%, #3182ce 100%);
+    display: flex; align-items: center; justify-content: center;
+    z-index: 9999; padding: 20px;
+  }
+  .login-overlay.hidden { display: none; }
+  .login-box {
+    background: white; border-radius: 12px;
+    padding: 32px 28px; max-width: 380px; width: 100%;
+    box-shadow: 0 20px 60px rgba(0,0,0,0.3);
+  }
+  .login-box h2 {
+    font-size: 18px; font-weight: 700; color: #1a202c;
+    text-align: center; margin-bottom: 4px;
+  }
+  .login-box .login-sub {
+    font-size: 12px; color: #718096; text-align: center; margin-bottom: 20px;
+  }
+  .login-box .form-group { margin-bottom: 14px; }
+  .login-box label {
+    display: block; font-size: 12px; font-weight: 600;
+    color: #4a5568; margin-bottom: 4px;
+  }
+  .login-box input {
+    width: 100%; padding: 10px 12px;
+    border: 1px solid #cbd5e0; border-radius: 6px;
+    font-size: 14px; font-family: inherit;
+  }
+  .login-box input:focus {
+    outline: none; border-color: #3182ce;
+    box-shadow: 0 0 0 3px rgba(49,130,206,0.15);
+  }
+  .login-box .login-btn {
+    width: 100%; padding: 12px; margin-top: 4px;
+    background: #3182ce; color: white; border: none;
+    border-radius: 6px; font-size: 14px; font-weight: 600;
+    cursor: pointer;
+  }
+  .login-box .login-btn:hover { background: #2c5282; }
+  .login-box .login-btn:disabled { background: #cbd5e0; cursor: not-allowed; }
+  .login-box .login-error {
+    background: #fed7d7; color: #742a2a;
+    padding: 8px 12px; border-radius: 4px;
+    font-size: 12px; margin-bottom: 12px;
+    text-align: center; display: none;
+  }
+  .login-box .login-error.show { display: block; }
+  .login-box .login-icon {
+    text-align: center; font-size: 32px; margin-bottom: 8px;
+  }
+  .logout-btn {
+    background: rgba(255,255,255,0.2);
+    color: white; border: 1px solid rgba(255,255,255,0.4);
+    padding: 4px 10px; border-radius: 4px;
+    font-size: 11px; cursor: pointer;
+  }
+  .logout-btn:hover { background: rgba(255,255,255,0.3); }
+</style>
+</head>
+<body>
+
+<!-- ログイン画面 -->
+<div class="login-overlay" id="loginOverlay">
+  <div class="login-box">
+    <div class="login-icon">🔒</div>
+    <h2>職員ログイン</h2>
+    <div class="login-sub">面談予約システム 管理画面</div>
+    <div class="login-error" id="loginError">IDまたはパスワードが正しくありません</div>
+    <div class="form-group">
+      <label for="loginId">ID</label>
+      <input type="text" id="loginId" autocomplete="username">
+    </div>
+    <div class="form-group">
+      <label for="loginPw">パスワード</label>
+      <input type="password" id="loginPw" autocomplete="current-password">
+    </div>
+    <button class="login-btn" id="loginBtn">ログイン</button>
+  </div>
+</div>
+
+<header>
+  <div class="header-inner">
+    <h1>⚙️ 面談予約 管理画面</h1>
+    <span class="badge">職員用</span>
+    <button class="logout-btn" id="logoutBtn">ログアウト</button>
+  </div>
+</header>
+
+<div class="school-bar">
+  <div class="school-bar-inner">
+    <label for="schoolSelect">校舎:</label>
+    <select id="schoolSelect"><option value="">読み込み中…</option></select>
+    <button id="reloadBtn">🔄 再読込</button>
+  </div>
+</div>
+
+<div class="container">
+  <div class="tabs">
+    <button class="tab active" data-tab="bookings">📅 予約一覧</button>
+    <button class="tab" data-tab="slots">➕ 枠の管理</button>
+    <button class="tab" data-tab="maint">🛠 システム設定</button>
+  </div>
+
+  <div class="panel" id="panel-bookings">
+    <div class="filter-bar">
+      <select id="periodFilter">
+        <option value="today">本日のみ</option>
+        <option value="week" selected>今週(今日から7日)</option>
+        <option value="month">今月(今日から30日)</option>
+        <option value="future">これから全て</option>
+        <option value="all">全期間(過去含む)</option>
+      </select>
+      <select id="statusFilter">
+        <option value="active">有効な予約のみ</option>
+        <option value="all">全て(キャンセル含む)</option>
+      </select>
+      <input type="text" class="search" id="searchInput" placeholder="お名前・メールアドレスで検索">
+      <span class="stats" id="bookingStats"></span>
+      <button class="btn btn-secondary" id="exportCalendarBtn" style="margin-left:auto;">📊 カレンダー出力</button>
+    </div>
+    <div id="bookingsList">
+      <div class="loading"><span class="spinner"></span>読み込み中…</div>
+    </div>
+  </div>
+
+  <div class="panel hidden" id="panel-slots">
+    <!-- 選択式追加 -->
+    <div class="select-form">
+      <h3>🗓 期間指定で選択式追加</h3>
+      <div class="time-info">
+        ⏰ 標準の枠生成時間 ／ 平日: 13:00〜21:30 (30分刻み・18枠) ／ 土日: 10:00〜18:30 (30分刻み・18枠)
+      </div>
+      <div class="select-form-header">
+        <div>
+          <label>開始日</label>
+          <input type="date" id="selectStartDate">
+        </div>
+        <div>
+          <label>終了日</label>
+          <input type="date" id="selectEndDate">
+        </div>
+        <div>
+          <button class="btn btn-primary" id="selectPreviewBtn">表示する</button>
+        </div>
+      </div>
+      <div style="display:none;">
+        <input type="text" id="selectLabel" value="">
+      </div>
+
+      <div id="selectGridArea" class="hidden" style="margin-top:14px;">
+        <div class="select-mode-toggle">
+          <span class="select-mode-label">選択方法:</span>
+          <div class="mode-switch">
+            <button id="modeClickBtn" class="mode-btn active" data-mode="click">クリック選択</button>
+            <button id="modeRangeBtn" class="mode-btn" data-mode="range">範囲選択</button>
+            <button id="modeDeleteBtn" class="mode-btn mode-btn-delete" data-mode="delete">削除モード</button>
+          </div>
+        </div>
+        <div id="modeHintClick" style="font-size:12px;color:#553c9a;background:#faf5ff;border:1px dashed #d6bcfa;border-radius:4px;padding:6px 10px;margin-bottom:8px;">
+          💡 <strong>クリック選択</strong>:追加したい枠のセルをクリックして選択します。もう一度クリックで解除できます。
+        </div>
+        <div id="modeHintRange" style="display:none;font-size:12px;color:#2c5282;background:#ebf8ff;border:1px dashed #90cdf4;border-radius:4px;padding:6px 10px;margin-bottom:8px;">
+          💡 <strong>範囲選択</strong>:始点のセルを1回クリック → 終点のセルをもう1回クリックすると、その間の長方形(複数日×複数時間)がまとめて選択されます。<br>
+          <strong>解除したい時</strong>:すでに選択済み(青)のセルを始点にすると、その範囲をまとめて解除できます(始点が灰色表示になります)。
+        </div>
+        <div id="modeHintDelete" style="display:none;font-size:12px;color:#a32d2d;background:#fcebeb;border:1px dashed #f09595;border-radius:4px;padding:6px 10px;margin-bottom:8px;">
+          🗑️ <strong>削除モード</strong>:登録済み(黄色)の枠だけが選択対象になります。始点→終点をクリックして範囲選択し、「選択した枠を削除」を押します。<br>
+          <strong>予約が入っている枠</strong>は削除されずスキップされます(先に予約一覧でキャンセルが必要)。
+        </div>
+        <div class="legend">
+          <span class="legend-item"><span class="legend-box" style="background:white;"></span>未選択</span>
+          <span class="legend-item"><span class="legend-box" style="background:#3182ce;"></span>選択中(追加対象)</span>
+          <span class="legend-item"><span class="legend-box" style="background:#e24b4a;"></span>選択中(削除対象)</span>
+          <span class="legend-item"><span class="legend-box" style="background:#fefcbf;"></span>登録済</span>
+          <span class="legend-item"><span class="legend-box" style="background:#edf2f7;"></span>過去</span>
+          <span class="legend-item"><span class="legend-box" style="background:#f7fafc;"></span>時間帯外</span>
+        </div>
+        <div class="select-quick-actions">
+          <button id="selectAll">全選択</button>
+          <button id="selectNone">全解除</button>
+          <button id="selectWeekday">平日のみ選択</button>
+          <button id="selectWeekend">土日のみ選択</button>
+        </div>
+        <div class="select-grid-wrapper">
+          <table class="select-grid" id="selectGrid"></table>
+        </div>
+        <div style="display:flex; align-items:center; gap:12px; margin-top:10px;">
+          <div id="selectStats" style="font-size:13px; color:#553c9a; font-weight:600;">選択中: 0枠</div>
+          <button class="btn btn-primary" id="selectAddBtn" style="margin-left:auto;" disabled>選択した枠を追加</button>
+          <button class="btn btn-danger" id="selectDeleteBtn" style="margin-left:auto; display:none;" disabled>選択した枠を削除</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- 個別1件追加 -->
+    <div class="add-form">
+      <h3>➕ 個別に1件追加</h3>
+      <div class="add-form-row" style="grid-template-columns: 1fr 1fr auto;">
+        <div><label>日付</label><input type="date" id="singleDate"></div>
+        <div><label>時刻</label><input type="time" id="singleTime"></div>
+        <div><button class="btn btn-primary" id="singleAddBtn">追加</button></div>
+      </div>
+      <div style="display:none;">
+        <input type="text" id="singleLabel" value="">
+      </div>
+    </div>
+
+    <!-- 既存枠リスト -->
+    <h3 class="section-title">登録済みの枠</h3>
+    <div class="filter-bar">
+      <select id="slotPeriodFilter">
+        <option value="future" selected>これから(未来のみ)</option>
+        <option value="all">全期間(過去含む)</option>
+      </select>
+      <span class="stats" id="slotStats"></span>
+    </div>
+
+    <div id="slotsList">
+      <div class="loading"><span class="spinner"></span>読み込み中…</div>
+    </div>
+  </div>
+
+  <!-- システム設定タブ(GAS版のスプレッドシートメニューの代替) -->
+  <div class="panel hidden" id="panel-maint">
+    <p style="font-size:13px;color:#718096;margin-bottom:16px;">
+      GAS版でスプレッドシートのメニューから実行していた操作を、ここから実行できます。
+      いずれの操作も既存の予約データを消すことはありません。
+    </p>
+    <div class="maint-grid">
+      <div class="maint-card">
+        <h4>🏗 シートの初期化・更新</h4>
+        <p>校舎ごとの「予約枠」「予約データ」シートを作成します。すでにある場合は、
+          不足している見出し列だけを補います(既存の予約は保持されます)。</p>
+        <button class="btn btn-primary" data-maint="init">実行する</button>
+      </div>
+      <div class="maint-card">
+        <h4>📧 通知先シートを作成</h4>
+        <p>新規予約の通知先メールアドレスを校舎ごとに設定するシートを用意します。
+          作成後、スプレッドシートのC列にアドレスを記入してください。</p>
+        <button class="btn btn-primary" data-maint="notifySheet">実行する</button>
+      </div>
+      <div class="maint-card">
+        <h4>▶ 新規予約通知をテスト送信</h4>
+        <p>「通知先」シートに登録された各校舎のアドレスへ、テストメールを送信します。
+          設定が正しいかの確認に使います。</p>
+        <button class="btn btn-secondary" data-maint="testNotify">実行する</button>
+      </div>
+      <div class="maint-card">
+        <h4>🩺 リマインドの診断</h4>
+        <p>翌日の予約のうち、どれがリマインド送信の対象になるかを確認します。
+          「送られない」と感じたときはまずこれを実行してください。</p>
+        <button class="btn btn-secondary" data-maint="diagnose">実行する</button>
+      </div>
+      <div class="maint-card">
+        <h4>✉️ リマインドを手動送信</h4>
+        <p>翌日の面談予約にリマインドメールを送ります。通常は毎日自動で送信されるため、
+          テストや復旧のときだけ使ってください(送信済みの予約には再送されません)。</p>
+        <button class="btn btn-secondary" data-maint="sendReminders">実行する</button>
+      </div>
+    </div>
+    <h3 class="section-title">実行結果</h3>
+    <div class="maint-output" id="maintOutput">ここに実行結果が表示されます。</div>
+  </div>
+</div>
+
+<!-- カレンダー出力モーダル -->
+<div class="modal-overlay" id="exportModal">
+  <div class="modal" style="max-width:480px;">
+    <div class="modal-header">
+      <h3>📊 カレンダー出力</h3>
+      <button class="modal-close" id="exportCloseBtn">×</button>
+    </div>
+    <div class="modal-body">
+      <p style="font-size:13px; color:#4a5568; margin-bottom:14px;">
+        指定した期間の予約を、月カレンダー形式のGoogleスプレッドシートに書き出します。
+        現在選択中の校舎(<strong id="exportSchoolName">―</strong>)の予約のみが対象です。
+      </p>
+      <div class="form-group">
+        <label for="exportStartDate">開始日</label>
+        <input type="date" id="exportStartDate">
+      </div>
+      <div class="form-group">
+        <label for="exportEndDate">終了日</label>
+        <input type="date" id="exportEndDate">
+      </div>
+      <div id="exportNote" style="font-size:12px; color:#718096; background:#f7fafc; border-radius:4px; padding:8px 10px; margin-top:8px;">
+        💡 期間が複数月にまたがる場合は、月ごとにシートが分かれて作成されます。<br>
+        💡 キャンセル済みの予約は含まれません。
+      </div>
+      <div id="exportError" style="display:none; color:#c53030; background:#fcebeb; border-radius:4px; padding:8px 10px; margin-top:10px; font-size:13px;"></div>
+      <div id="exportProgress" style="display:none; margin-top:14px; text-align:center; color:#2c5282;">
+        <span class="spinner"></span> 出力中です。少々お待ちください…
+      </div>
+      <div id="exportSuccess" style="display:none; margin-top:14px; padding:12px; background:#e6fffa; border:1px solid #38b2ac; border-radius:6px;">
+        <div style="font-weight:600; color:#234e52; margin-bottom:6px;">✅ 出力が完了しました</div>
+        <div style="font-size:12px; color:#234e52; margin-bottom:10px;" id="exportSuccessDetail"></div>
+        <a id="exportOpenLink" href="#" target="_blank" rel="noopener" class="btn btn-primary" style="text-decoration:none; display:inline-block;">スプレッドシートを開く</a>
+      </div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-secondary" id="exportCancelBtn">閉じる</button>
+      <button class="btn btn-primary" id="exportRunBtn">出力する</button>
+    </div>
+  </div>
+</div>
+
+<!-- 予約詳細モーダル -->
+<div class="modal-overlay" id="bookingModal">
+  <div class="modal">
+    <div class="modal-header">
+      <h3>📋 予約の詳細</h3>
+      <button class="modal-close" id="modalCloseBtn">×</button>
+    </div>
+    <div class="modal-body">
+      <div class="modal-section">
+        <h4>予約情報</h4>
+        <div class="modal-info-row">
+          <span class="label">日時</span>
+          <span class="value" id="modalDatetime"></span>
+        </div>
+        <div class="modal-info-row">
+          <span class="label">状態</span>
+          <span class="value" id="modalStatus"></span>
+        </div>
+        <div class="modal-info-row">
+          <span class="label">お子様</span>
+          <span class="value" id="modalChild"></span>
+        </div>
+        <div class="modal-info-row">
+          <span class="label">学年</span>
+          <span class="value" id="modalGrade"></span>
+        </div>
+        <div class="modal-info-row">
+          <span class="label">保護者</span>
+          <span class="value" id="modalParent"></span>
+        </div>
+        <div class="modal-info-row">
+          <span class="label">メール</span>
+          <span class="value" id="modalEmail"></span>
+        </div>
+        <div class="modal-info-row" id="modalNoteRow" style="display:none;">
+          <span class="label">ご相談</span>
+          <span class="value" id="modalParentNote"></span>
+        </div>
+      </div>
+
+      <div class="modal-section" id="modalRescheduleSection">
+        <h4>🔄 日時を変更する</h4>
+        <div class="modal-reschedule">
+          <div class="modal-reschedule-row">
+            <div>
+              <label>新しい日付</label>
+              <input type="date" id="modalNewDate">
+            </div>
+            <div>
+              <label>新しい時刻</label>
+              <input type="time" id="modalNewTime">
+            </div>
+            <div>
+              <button class="btn btn-primary" id="modalRescheduleBtn">日時を変更</button>
+            </div>
+          </div>
+          <div class="modal-hint">変更先の枠が他で予約されていないかチェックされます。</div>
+        </div>
+      </div>
+    </div>
+    <div class="modal-actions">
+      <button class="btn btn-danger" id="modalCancelBookingBtn">この予約をキャンセル</button>
+    </div>
+  </div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script>
+const LAST_SCHOOL_KEY = 'admin_last_school';
+
+// 標準の時間帯設定
+const WEEKDAY_TIMES = (() => {
+  const arr = [];
+  for (let min = 13 * 60; min < 22 * 60; min += 30) {
+    arr.push(formatMinutes(min));
+  }
+  return arr;
+})();
+const WEEKEND_TIMES = (() => {
+  const arr = [];
+  for (let min = 10 * 60; min < 19 * 60; min += 30) {
+    arr.push(formatMinutes(min));
+  }
+  return arr;
+})();
+// 全時刻のユニオン(グリッド表示用)
+const ALL_TIMES = (() => {
+  const set = new Set([...WEEKDAY_TIMES, ...WEEKEND_TIMES]);
+  return Array.from(set).sort();
+})();
+
+function formatMinutes(min) {
+  const h = Math.floor(min / 60);
+  const m = min % 60;
+  return String(h).padStart(2, '0') + ':' + String(m).padStart(2, '0');
+}
+
+let state = {
+  schools: [],
+  currentSchoolId: '',
+  bookings: [],
+  slots: [],
+  // 選択式追加用
+  selectGridDates: [],     // 表示中の日付一覧
+  selectedKeys: new Set(), // 'YYYY-MM-DD HH:MM' のセット
+  existingKeys: new Set(), // 既存枠のキー(チェック不可)
+};
+
+/**
+ * サーバーAPIの呼び出し。
+ * GAS版の google.script.run を fetch に置き換えたもので、
+ * 戻り値の形({ ok: true, ... } / { ok: false, error })は同じ。
+ * セッション切れ(401)を受け取ったらログイン画面に戻す。
+ */
+async function apiCall(funcName, payload) {
+  const json = (method, body) => ({
+    method,
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(body || {}),
+  });
+  const q = (path, params) => path + '?' + new URLSearchParams(params).toString();
+  let res;
+  if (funcName === 'getSchools') {
+    res = await fetch('/api/schools');
+  } else if (funcName === 'getAllSlots') {
+    res = await fetch(q('/api/admin/slots', { schoolId: payload.schoolId }));
+  } else if (funcName === 'getAllBookings') {
+    res = await fetch(q('/api/admin/bookings', { schoolId: payload.schoolId }));
+  } else if (funcName === 'addSlots') {
+    res = await fetch('/api/admin/slots', json('POST', payload));
+  } else if (funcName === 'updateSlot') {
+    res = await fetch('/api/admin/slots', json('PATCH', payload));
+  } else if (funcName === 'bulkCapacity') {
+    res = await fetch('/api/admin/slots', json('PATCH', { ...payload, action: 'bulkCapacity' }));
+  } else if (funcName === 'deleteSlot' || funcName === 'deleteSlots') {
+    res = await fetch('/api/admin/slots', json('DELETE', payload));
+  } else if (funcName === 'cancelBooking') {
+    res = await fetch('/api/admin/bookings', json('DELETE', payload));
+  } else if (funcName === 'updateBooking') {
+    res = await fetch('/api/admin/bookings', json('PATCH', payload));
+  } else if (funcName === 'exportCalendar') {
+    res = await fetch('/api/admin/export-calendar', json('POST', payload));
+  } else if (funcName === 'setup') {
+    res = await fetch('/api/admin/setup', json('POST', payload));
+  } else {
+    throw new Error('不明な操作です: ' + funcName);
+  }
+  let data;
+  try {
+    data = await res.json();
+  } catch (e) {
+    throw new Error('サーバーからの応答を読み取れませんでした (HTTP ' + res.status + ')');
+  }
+  if (res.status === 401 && data.needLogin) {
+    showLoginScreen();
+    throw new Error('セッションが切れました。もう一度ログインしてください。');
+  }
+  if (!res.ok && data.ok === undefined) {
+    throw new Error(data.error || ('通信エラーが発生しました (HTTP ' + res.status + ')'));
+  }
+  return data;
+}
+
+async function loadSchools() {
+  try {
+    const data = await apiCall('getSchools');
+    if (!data.ok) throw new Error(data.error);
+    state.schools = data.schools || [];
+    const sel = document.getElementById('schoolSelect');
+    sel.innerHTML = '<option value="">校舎を選択…</option>' +
+      state.schools.map(s => '<option value="' + s.id + '">' + escapeHtml(s.name) + '</option>').join('');
+    let last = null;
+    try { last = localStorage.getItem(LAST_SCHOOL_KEY); } catch (e) {}
+    if (last && state.schools.find(s => s.id === last)) {
+      sel.value = last;
+      state.currentSchoolId = last;
+      await loadAll();
+    } else if (state.schools.length > 0) {
+      sel.value = state.schools[0].id;
+      state.currentSchoolId = state.schools[0].id;
+      await loadAll();
+    }
+  } catch (err) { showToast(err.message, 'error'); }
+}
+
+async function loadAll() {
+  if (!state.currentSchoolId) return;
+  await Promise.all([loadBookings(), loadSlots()]);
+}
+
+async function loadBookings() {
+  document.getElementById('bookingsList').innerHTML =
+    '<div class="loading"><span class="spinner"></span>読み込み中…</div>';
+  try {
+    const data = await apiCall('getAllBookings', { schoolId: state.currentSchoolId });
+    if (!data.ok) throw new Error(data.error);
+    state.bookings = data.bookings || [];
+    renderBookings();
+  } catch (err) {
+    showToast(err.message, 'error');
+    document.getElementById('bookingsList').innerHTML =
+      '<div class="empty-msg">読み込みエラー: ' + escapeHtml(err.message) + '</div>';
+  }
+}
+
+async function loadSlots() {
+  document.getElementById('slotsList').innerHTML =
+    '<div class="loading"><span class="spinner"></span>読み込み中…</div>';
+  try {
+    const data = await apiCall('getAllSlots', { schoolId: state.currentSchoolId });
+    if (!data.ok) throw new Error(data.error);
+    state.slots = data.slots || [];
+    // 既存キーを更新(選択グリッド用)
+    state.existingKeys = new Set();
+    state.slots.forEach(s => state.existingKeys.add(s.date + ' ' + s.time));
+    renderSlots();
+    // 選択グリッドが表示中なら再描画
+    if (!document.getElementById('selectGridArea').classList.contains('hidden')) {
+      renderSelectGrid();
+    }
+  } catch (err) {
+    showToast(err.message, 'error');
+    document.getElementById('slotsList').innerHTML =
+      '<div class="empty-msg">読み込みエラー: ' + escapeHtml(err.message) + '</div>';
+  }
+}
+
+function renderBookings() {
+  const container = document.getElementById('bookingsList');
+  const period = document.getElementById('periodFilter').value;
+  const status = document.getElementById('statusFilter').value;
+  const search = document.getElementById('searchInput').value.trim().toLowerCase();
+
+  let filtered = state.bookings.slice();
+  const now = new Date();
+  now.setHours(0, 0, 0, 0);
+  filtered = filtered.filter(b => {
+    const bDate = parseYMD(b.date);
+    const diff = (bDate.getTime() - now.getTime()) / (1000 * 60 * 60 * 24);
+    if (period === 'today') return diff === 0;
+    if (period === 'week') return diff >= 0 && diff < 7;
+    if (period === 'month') return diff >= 0 && diff < 30;
+    if (period === 'future') return diff >= 0;
+    return true;
+  });
+  if (status === 'active') filtered = filtered.filter(b => b.status !== 'cancelled');
+  if (search) {
+    filtered = filtered.filter(b =>
+      (b.childName || '').toLowerCase().includes(search) ||
+      (b.parentName || '').toLowerCase().includes(search) ||
+      (b.email || '').toLowerCase().includes(search)
+    );
+  }
+
+  document.getElementById('bookingStats').textContent = filtered.length + '件';
+  if (filtered.length === 0) {
+    container.innerHTML = '<div class="empty-msg">該当する予約はありません</div>';
+    return;
+  }
+  const grouped = {};
+  filtered.forEach(b => {
+    if (!grouped[b.date]) grouped[b.date] = [];
+    grouped[b.date].push(b);
+  });
+  const dates = Object.keys(grouped).sort();
+  let html = '';
+  dates.forEach(date => {
+    html += '<div class="section-title">' + formatDateLabel(date) + ' (' + grouped[date].length + '件)</div>';
+    grouped[date].forEach(b => {
+      const past = isPast(b.date, b.time);
+      const cancelled = b.status === 'cancelled';
+      let badgeHtml, cardCls = 'booking-card';
+      if (cancelled) { badgeHtml = '<span class="booking-badge badge-cancelled">キャンセル済</span>'; cardCls += ' cancelled'; }
+      else if (past) { badgeHtml = '<span class="booking-badge badge-past">終了</span>'; cardCls += ' past'; }
+      else { badgeHtml = '<span class="booking-badge badge-upcoming">予約済</span>'; }
+      const actions = (!cancelled) ?
+        '<button class="btn btn-primary btn-mini" data-action="detail" data-id="' + b.id + '">予約変更・キャンセル</button>' :
+        '<button class="btn btn-secondary btn-mini" data-action="detail" data-id="' + b.id + '">詳細</button>';
+      // 担当欄(縮小・1行入力)
+      const staffNoteValue = escapeHtml(b.staffNote || '');
+      const staffArea = cancelled
+        ? (b.staffNote ? '<div class="staff-memo-readonly">👤 担当:' + staffNoteValue + '</div>' : '')
+        : '<div class="staff-memo-wrap staff-memo-compact">' +
+            '<input type="text" class="staff-memo-input staff-memo-input-compact" data-id="' + b.id + '" ' +
+              'placeholder="👤 担当" value="' + staffNoteValue + '">' +
+            '<button class="staff-memo-save" data-action="save-memo" data-id="' + b.id + '">💾</button>' +
+          '</div>';
+      // 面談記録欄(担当の下、現在の職員メモと同サイズ)
+      const interviewNoteValue = escapeHtml(b.interviewNote || '');
+      const interviewDone = b.interviewDone === true;
+      const interviewUpdated = b.interviewUpdated ? formatInterviewTimestamp(b.interviewUpdated) : '';
+      const interviewArea = cancelled
+        ? (b.interviewNote ? '<div class="interview-readonly">📝 面談記録:<br>' +
+            interviewNoteValue.replace(/\n/g, '<br>') + '</div>' : '')
+        : '<div class="interview-wrap">' +
+            '<div class="interview-header">' +
+              '<label class="interview-done">' +
+                '<input type="checkbox" class="interview-done-cb" data-id="' + b.id + '"' +
+                  (interviewDone ? ' checked' : '') + '> 面談実施済み' +
+              '</label>' +
+              (interviewUpdated ? '<span class="interview-updated">最終更新:' + interviewUpdated + '</span>' : '') +
+            '</div>' +
+            '<textarea class="interview-input" data-id="' + b.id + '" rows="3" ' +
+              'placeholder="📝 面談記録 (面談で話した内容・所見など)">' + interviewNoteValue + '</textarea>' +
+            '<button class="interview-save" data-action="save-interview" data-id="' + b.id + '">💾 面談記録を保存</button>' +
+          '</div>';
+      html += '<div class="' + cardCls + '">' +
+        '<div class="booking-datetime"><span class="time">' + b.time + '</span></div>' +
+        '<div class="booking-body">' +
+          '<div class="name">' + escapeHtml(b.childName) +
+            '<span class="grade">(' + escapeHtml(b.grade || '-') + ')</span></div>' +
+          '<div class="parent">保護者: ' + escapeHtml(b.parentName) + '</div>' +
+          '<div class="email">📧 ' + escapeHtml(b.email || '-') + '</div>' +
+          (b.note ? '<div class="note">' + escapeHtml(b.note) + '</div>' : '') +
+          staffArea +
+          interviewArea +
+        '</div>' +
+        '<div class="booking-actions">' + badgeHtml + actions + '</div>' +
+      '</div>';
+    });
+  });
+  container.innerHTML = html;
+  container.querySelectorAll('[data-action]').forEach(btn => {
+    btn.addEventListener('click', () => {
+      if (btn.dataset.action === 'detail') openBookingModal(btn.dataset.id);
+      if (btn.dataset.action === 'save-memo') {
+        const id = btn.dataset.id;
+        const inp = container.querySelector('.staff-memo-input[data-id="' + id + '"]');
+        if (inp) handleInlineMemoSave(id, inp.value);
+      }
+      if (btn.dataset.action === 'save-interview') {
+        const id = btn.dataset.id;
+        const ta = container.querySelector('.interview-input[data-id="' + id + '"]');
+        const cb = container.querySelector('.interview-done-cb[data-id="' + id + '"]');
+        if (ta && cb) handleInterviewSave(id, ta.value, cb.checked);
+      }
+    });
+  });
+  // 担当欄: フォーカスアウトで自動保存
+  container.querySelectorAll('.staff-memo-input').forEach(inp => {
+    inp.addEventListener('blur', () => {
+      const id = inp.dataset.id;
+      const b = state.bookings.find(x => x.id === id);
+      if (b && (b.staffNote || '') !== inp.value) {
+        handleInlineMemoSave(id, inp.value);
+      }
+    });
+    // Ctrl/⌘+Enterで保存
+    inp.addEventListener('keydown', (e) => {
+      if ((e.ctrlKey || e.metaKey) && e.key === 'Enter') {
+        e.preventDefault();
+        inp.blur();
+      }
+    });
+  });
+  // 面談記録: フォーカスアウトで自動保存(変更があれば)
+  container.querySelectorAll('.interview-input').forEach(ta => {
+    ta.addEventListener('blur', () => {
+      const id = ta.dataset.id;
+      const b = state.bookings.find(x => x.id === id);
+      const cb = container.querySelector('.interview-done-cb[data-id="' + id + '"]');
+      if (!b || !cb) return;
+      if ((b.interviewNote || '') !== ta.value) {
+        handleInterviewSave(id, ta.value, cb.checked);
+      }
+    });
+    ta.addEventListener('keydown', (e) => {
+      if ((e.ctrlKey || e.metaKey) && e.key === 'Enter') {
+        e.preventDefault();
+        ta.blur();
+      }
+    });
+  });
+  // 実施チェック: 変更したら即保存
+  container.querySelectorAll('.interview-done-cb').forEach(cb => {
+    cb.addEventListener('change', () => {
+      const id = cb.dataset.id;
+      const ta = container.querySelector('.interview-input[data-id="' + id + '"]');
+      const note = ta ? ta.value : '';
+      handleInterviewSave(id, note, cb.checked);
+    });
+  });
+}
+
+async function handleAdminCancel(id) {
+  if (!confirm('この予約をキャンセルしますか?\n保護者には自動通知されません。')) return;
+  try {
+    const res = await apiCall('cancelBooking', { schoolId: state.currentSchoolId, id });
+    if (!res.ok) throw new Error(res.error);
+    showToast('予約をキャンセルしました', 'success');
+    closeBookingModal();
+    await loadAll();
+  } catch (err) { showToast(err.message, 'error'); }
+}
+
+// 一覧上のメモ欄: 自動保存
+async function handleInlineMemoSave(id, note) {
+  try {
+    const res = await apiCall('updateBooking', {
+      schoolId: state.currentSchoolId,
+      id, staffNote: note,
+    });
+    if (!res.ok) throw new Error(res.error);
+    showToast('担当を保存しました', 'success');
+    // 内部stateも更新(画面再描画はしない=入力中の操作感を保つ)
+    const b = state.bookings.find(x => x.id === id);
+    if (b) b.staffNote = note;
+  } catch (err) {
+    showToast('担当保存エラー: ' + err.message, 'error');
+  }
+}
+
+// 面談記録の保存(実施チェック + 記録テキスト)
+async function handleInterviewSave(id, interviewNote, interviewDone) {
+  try {
+    const res = await apiCall('updateBooking', {
+      schoolId: state.currentSchoolId,
+      id, interviewNote: interviewNote, interviewDone: interviewDone,
+    });
+    if (!res.ok) throw new Error(res.error);
+    showToast('面談記録を保存しました', 'success');
+    const b = state.bookings.find(x => x.id === id);
+    if (b) {
+      b.interviewNote = interviewNote;
+      b.interviewDone = interviewDone;
+      b.interviewUpdated = new Date().toString();
+      // 更新日時の表示だけ静かに書き換え(再描画はしない)
+      const card = document.querySelector('.interview-input[data-id="' + id + '"]');
+      if (card) {
+        const header = card.parentElement.querySelector('.interview-header');
+        let updatedEl = header.querySelector('.interview-updated');
+        const label = '最終更新:' + formatInterviewTimestamp(new Date());
+        if (updatedEl) updatedEl.textContent = label;
+        else {
+          updatedEl = document.createElement('span');
+          updatedEl.className = 'interview-updated';
+          updatedEl.textContent = label;
+          header.appendChild(updatedEl);
+        }
+      }
+    }
+  } catch (err) {
+    showToast('面談記録保存エラー: ' + err.message, 'error');
+  }
+}
+
+// 面談記録の最終更新日時を「MM/DD HH:MM」形式に整える
+function formatInterviewTimestamp(val) {
+  if (val instanceof Date) {
+    return stampParts(val);
+  }
+  // サーバーは 'YYYY-MM-DD HH:MM' 形式(日本時間)で返す
+  const m = String(val).match(/^(\d{4})-(\d{2})-(\d{2})[ T](\d{2}):(\d{2})/);
+  if (m) return m[2] + '/' + m[3] + ' ' + m[4] + ':' + m[5];
+  const d = new Date(val);
+  if (isNaN(d.getTime())) return '';
+  return stampParts(d);
+}
+
+function stampParts(d) {
+  const mm = String(d.getMonth() + 1).padStart(2, '0');
+  const dd = String(d.getDate()).padStart(2, '0');
+  const hh = String(d.getHours()).padStart(2, '0');
+  const mi = String(d.getMinutes()).padStart(2, '0');
+  return mm + '/' + dd + ' ' + hh + ':' + mi;
+}
+
+// ========== 予約詳細モーダル ==========
+let currentModalBookingId = null;
+
+function openBookingModal(id) {
+  const b = state.bookings.find(x => x.id === id);
+  if (!b) return;
+  currentModalBookingId = id;
+
+  // 情報部分の埋め込み
+  document.getElementById('modalDatetime').textContent = formatJPFull(b.date, b.time);
+  const statusEl = document.getElementById('modalStatus');
+  const past = isPast(b.date, b.time);
+  if (b.status === 'cancelled') {
+    statusEl.textContent = 'キャンセル済み';
+    statusEl.className = 'value cancelled';
+  } else if (past) {
+    statusEl.textContent = '終了';
+    statusEl.className = 'value';
+  } else {
+    statusEl.textContent = '予約済';
+    statusEl.className = 'value upcoming';
+  }
+  document.getElementById('modalChild').textContent = b.childName || '-';
+  document.getElementById('modalGrade').textContent = b.grade || '-';
+  document.getElementById('modalParent').textContent = b.parentName || '-';
+  document.getElementById('modalEmail').textContent = b.email || '-';
+  const noteRow = document.getElementById('modalNoteRow');
+  if (b.note) {
+    noteRow.style.display = '';
+    document.getElementById('modalParentNote').textContent = b.note;
+  } else {
+    noteRow.style.display = 'none';
+  }
+  document.getElementById('modalNewDate').value = b.date;
+  document.getElementById('modalNewTime').value = b.time;
+
+  // キャンセル済みの予約は変更・キャンセル不可
+  const cancelled = b.status === 'cancelled';
+  document.getElementById('modalRescheduleSection').style.display = cancelled ? 'none' : '';
+  document.getElementById('modalCancelBookingBtn').style.display = cancelled ? 'none' : '';
+
+  document.getElementById('bookingModal').classList.add('show');
+}
+
+function closeBookingModal() {
+  document.getElementById('bookingModal').classList.remove('show');
+  currentModalBookingId = null;
+}
+
+async function handleReschedule() {
+  if (!currentModalBookingId) return;
+  const newDate = document.getElementById('modalNewDate').value;
+  const newTime = document.getElementById('modalNewTime').value;
+  if (!newDate || !newTime) {
+    showToast('新しい日付と時刻を入力してください', 'error');
+    return;
+  }
+  const b = state.bookings.find(x => x.id === currentModalBookingId);
+  if (!b) return;
+  if (b.date === newDate && b.time === newTime) {
+    showToast('日時が変更されていません', 'error');
+    return;
+  }
+  if (!confirm('日時を変更しますか?\n' + formatJPFull(b.date, b.time) + '\n→ ' + formatJPFull(newDate, newTime))) return;
+  try {
+    const res = await apiCall('updateBooking', {
+      schoolId: state.currentSchoolId,
+      id: currentModalBookingId,
+      date: newDate, time: newTime,
+    });
+    if (!res.ok) throw new Error(res.error);
+    showToast('日時を変更しました', 'success');
+    closeBookingModal();
+    await loadAll();
+  } catch (err) { showToast(err.message, 'error'); }
+}
+
+function formatJPFull(dateStr, timeStr) {
+  const d = parseYMD(dateStr);
+  const weekdays = ['日','月','火','水','木','金','土'];
+  return d.getFullYear() + '年' + (d.getMonth()+1) + '月' + d.getDate() +
+    '日(' + weekdays[d.getDay()] + ') ' + (timeStr || '');
+}
+
+function renderSlots() {
+  const container = document.getElementById('slotsList');
+  const filter = document.getElementById('slotPeriodFilter').value;
+  let filtered = state.slots.slice();
+  if (filter === 'future') filtered = filtered.filter(s => !s.isPast);
+  document.getElementById('slotStats').textContent =
+    filtered.length + '件 (うち予約済 ' + filtered.filter(s => s.booked > 0).length + '件)';
+  if (filtered.length === 0) {
+    container.innerHTML = '<div class="empty-msg">登録された枠がありません</div>';
+    return;
+  }
+  const grouped = {};
+  filtered.forEach(s => {
+    if (!grouped[s.date]) grouped[s.date] = [];
+    grouped[s.date].push(s);
+  });
+  const dates = Object.keys(grouped).sort();
+  let html = '';
+  dates.forEach(date => {
+    html += '<div class="section-title">' + formatDateLabel(date) + '</div>';
+    html += '<table class="slot-table"><thead><tr>' +
+      '<th style="width:90px;">時刻</th>' +
+      '<th>状態</th>' +
+      '<th style="width:90px;">定員</th>' +
+      '<th style="width:90px;">公開</th>' +
+      '<th style="width:70px;">操作</th>' +
+      '</tr></thead><tbody>';
+    grouped[date].forEach(s => {
+      let cls = '';
+      let status = '<span style="color:#22543d;">予約可能</span>';
+      if (s.isPast) { cls += 'past'; status = '<span style="color:#718096;">過去</span>'; }
+      if (s.booked > 0) {
+        cls += ' booked';
+        const names = (s.bookings || []).map(b => escapeHtml(b.childName)).join('・');
+        status = '<span style="color:#c05621;">予約' + s.booked + '/' + s.capacity + '名(' + names + ')</span>';
+      }
+      if (!s.published) { cls += ' unpublished'; if (s.booked === 0) status = '<span style="color:#718096;">非公開</span>'; }
+      const toggleClass = s.published ? 'on' : 'off';
+      const toggleText = s.published ? '公開中' : '非公開';
+      // 定員スイッチ: 既存予約数より下にはできないので、定員1にできない条件を判定
+      const cannotReduce = s.booked >= 2;  // 予約が2件以上あれば定員1にできない
+      const switchDisabled = s.isPast || cannotReduce;
+      const switchCls = 'capacity-switch' + (switchDisabled ? ' disabled' : '');
+      const opt1Cls = s.capacity === 1 ? 'opt active' : 'opt';
+      const opt2Cls = s.capacity === 2 ? 'opt active' : 'opt';
+      const switchTitle = cannotReduce
+        ? 'title="既に2名の予約があるため定員1にできません"' : '';
+      html += '<tr class="' + cls + '" data-row="' + s.rowNum + '">' +
+        '<td><strong>' + s.time + '</strong></td>' +
+        '<td>' + status + '</td>' +
+        '<td class="capacity-cell-wrap">' +
+          '<div class="' + switchCls + '" data-cap="' + s.capacity + '" data-row="' + s.rowNum + '" ' + switchTitle + '>' +
+            '<span class="' + opt1Cls + '">1名</span>' +
+            '<span class="' + opt2Cls + '">2名</span>' +
+            '<div class="knob"></div>' +
+          '</div>' +
+        '</td>' +
+        '<td><button class="btn-toggle ' + toggleClass + '" data-row="' + s.rowNum + '" data-pub="' + s.published + '">' + toggleText + '</button></td>' +
+        '<td><button class="btn btn-danger btn-mini" data-action="del" data-row="' + s.rowNum + '">削除</button></td>' +
+      '</tr>';
+    });
+    html += '</tbody></table>';
+  });
+  container.innerHTML = html;
+
+  container.querySelectorAll('.btn-toggle').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const rowNum = parseInt(btn.dataset.row);
+      const newPub = btn.dataset.pub === 'false';
+      handleTogglePublish(rowNum, newPub);
+    });
+  });
+  container.querySelectorAll('[data-action="del"]').forEach(btn => {
+    btn.addEventListener('click', () => handleDeleteSlot(parseInt(btn.dataset.row)));
+  });
+  // 定員スイッチ
+  container.querySelectorAll('.capacity-switch:not(.disabled)').forEach(sw => {
+    sw.addEventListener('click', () => {
+      const rowNum = parseInt(sw.dataset.row);
+      const curCap = parseInt(sw.dataset.cap);
+      const newCap = curCap === 1 ? 2 : 1;
+      handleToggleCapacity(rowNum, newCap);
+    });
+  });
+}
+
+async function handleToggleCapacity(rowNum, newCap) {
+  try {
+    const res = await apiCall('updateSlot', {
+      schoolId: state.currentSchoolId, rowNum, capacity: newCap,
+    });
+    if (!res.ok) throw new Error(res.error);
+    showToast('定員を ' + newCap + '名 に変更しました', 'success');
+    await loadSlots();
+  } catch (err) { showToast(err.message, 'error'); }
+}
+
+async function handleTogglePublish(rowNum, newPub) {
+  try {
+    const res = await apiCall('updateSlot', { schoolId: state.currentSchoolId, rowNum, published: newPub });
+    if (!res.ok) throw new Error(res.error);
+    showToast(newPub ? '公開しました' : '非公開にしました', 'success');
+    await loadSlots();
+  } catch (err) { showToast(err.message, 'error'); }
+}
+
+async function handleDeleteSlot(rowNum) {
+  const slot = state.slots.find(s => s.rowNum === rowNum);
+  if (!slot) return;
+  if (slot.booked > 0) {
+    alert('この枠は予約が入っているため削除できません。\n先に予約をキャンセルしてください。');
+    return;
+  }
+  if (!confirm(formatDateLabel(slot.date) + ' ' + slot.time + ' の枠を削除しますか?')) return;
+  try {
+    const res = await apiCall('deleteSlot', { schoolId: state.currentSchoolId, rowNum });
+    if (!res.ok) throw new Error(res.error);
+    showToast('枠を削除しました', 'success');
+    await loadSlots();
+  } catch (err) { showToast(err.message, 'error'); }
+}
+
+async function handleUpdateLabel(rowNum, label) {
+  try {
+    const res = await apiCall('updateSlot', { schoolId: state.currentSchoolId, rowNum, label });
+    if (!res.ok) throw new Error(res.error);
+    showToast('ラベルを更新しました', 'success');
+    const slot = state.slots.find(s => s.rowNum === rowNum);
+    if (slot) slot.label = label;
+  } catch (err) { showToast(err.message, 'error'); }
+}
+
+// ========== 選択式追加 ==========
+
+function isWeekend(dateStr) {
+  const d = parseYMD(dateStr);
+  const day = d.getDay();
+  return day === 0 || day === 6;
+}
+
+/**
+ * その日に時刻枠が存在するか(平日/土日で時間帯が違う)
+ */
+function isTimeInRange(dateStr, time) {
+  if (isWeekend(dateStr)) {
+    return WEEKEND_TIMES.includes(time);
+  } else {
+    return WEEKDAY_TIMES.includes(time);
+  }
+}
+
+function buildDatesInRange(startStr, endStr) {
+  const start = parseYMD(startStr);
+  const end = parseYMD(endStr);
+  if (end < start) return [];
+  const result = [];
+  const cur = new Date(start);
+  while (cur <= end) {
+    const y = cur.getFullYear();
+    const m = String(cur.getMonth() + 1).padStart(2, '0');
+    const d = String(cur.getDate()).padStart(2, '0');
+    result.push(y + '-' + m + '-' + d);
+    cur.setDate(cur.getDate() + 1);
+  }
+  return result;
+}
+
+function handlePreviewSelect() {
+  const start = document.getElementById('selectStartDate').value;
+  const end = document.getElementById('selectEndDate').value;
+  if (!start || !end) {
+    showToast('開始日と終了日を入力してください', 'error');
+    return;
+  }
+  const dates = buildDatesInRange(start, end);
+  if (dates.length === 0) {
+    showToast('期間が不正です', 'error');
+    return;
+  }
+  if (dates.length > 31) {
+    if (!confirm(dates.length + '日分は多めです。続けますか?(表示が重くなる可能性があります)')) return;
+  }
+  state.selectGridDates = dates;
+  state.selectedKeys = new Set();
+  document.getElementById('selectGridArea').classList.remove('hidden');
+  renderSelectGrid();
+}
+
+function renderSelectGrid() {
+  const grid = document.getElementById('selectGrid');
+  const dates = state.selectGridDates;
+  if (dates.length === 0) {
+    grid.innerHTML = '';
+    return;
+  }
+  const weekdayNames = ['日','月','火','水','木','金','土'];
+
+  // ヘッダ
+  let html = '<thead><tr><th class="time-col">時刻</th>';
+  dates.forEach(d => {
+    const date = parseYMD(d);
+    const dayIdx = date.getDay();
+    const cls = (dayIdx === 0 || dayIdx === 6) ? 'weekend' : 'weekday';
+    html += '<th class="' + cls + '">' +
+      (date.getMonth()+1) + '/' + date.getDate() + '<br>(' + weekdayNames[dayIdx] + ')</th>';
+  });
+  html += '</tr></thead><tbody>';
+
+  // 各時刻行
+  const now = Date.now();
+  const isDeleteMode = (selectMode === 'delete');
+  ALL_TIMES.forEach(time => {
+    html += '<tr><td class="time-cell">' + time + '</td>';
+    dates.forEach(d => {
+      const key = d + ' ' + time;
+      const inRange = isTimeInRange(d, time);
+      const existing = state.existingKeys.has(key);
+      const slotDate = new Date(d + 'T' + time + ':00');
+      const isPast = slotDate.getTime() < now;
+      let cls = 'cell';
+      let dataAttr = '';
+      if (isDeleteMode) {
+        // 削除モード: 既存枠(登録済み)だけが選択対象
+        if (existing) {
+          dataAttr = ' data-key="' + key + '"';
+          cls += ' existing del-target';
+          if (state.selectedKeys.has(key)) cls += ' selected-del';
+        } else if (!inRange) {
+          cls += ' outside';
+        } else if (isPast) {
+          cls += ' past';
+        } else {
+          // 追加可能だが枠未作成 → 削除対象なし
+          cls += ' empty-slot';
+        }
+      } else {
+        // 追加モード(click/range): 空き枠が選択対象
+        if (!inRange) cls += ' outside';
+        else if (existing) cls += ' existing';
+        else if (isPast) cls += ' past';
+        else {
+          dataAttr = ' data-key="' + key + '"';
+          if (state.selectedKeys.has(key)) cls += ' selected';
+        }
+      }
+      html += '<td class="' + cls + '"' + dataAttr + '></td>';
+    });
+    html += '</tr>';
+  });
+  html += '</tbody>';
+  grid.innerHTML = html;
+
+  // 選択イベント(クリック/範囲モード対応)
+  setupGridSelect(grid);
+  // 再描画時は範囲選択の始点をリセット
+  rangeStartKey = null;
+  updateSelectStats();
+}
+
+// 選択モード: 'click'(1セルずつ) / 'range'(始点→終点) / 'delete'(既存枠を範囲削除)
+let selectMode = 'click';
+// 範囲選択の始点(キー)。null なら始点未設定
+let rangeStartKey = null;
+
+function setSelectMode(mode) {
+  selectMode = mode;
+  rangeStartKey = null;
+  // モードを変えたら選択をクリア(追加用と削除用で対象セルが異なるため)
+  state.selectedKeys = new Set();
+  // ボタンの見た目
+  document.getElementById('modeClickBtn').classList.toggle('active', mode === 'click');
+  document.getElementById('modeRangeBtn').classList.toggle('active', mode === 'range');
+  document.getElementById('modeDeleteBtn').classList.toggle('active', mode === 'delete');
+  // ヒントの出し分け
+  document.getElementById('modeHintClick').style.display = (mode === 'click') ? '' : 'none';
+  document.getElementById('modeHintRange').style.display = (mode === 'range') ? '' : 'none';
+  document.getElementById('modeHintDelete').style.display = (mode === 'delete') ? '' : 'none';
+  // 追加ボタンと削除ボタンの出し分け
+  document.getElementById('selectAddBtn').style.display = (mode === 'delete') ? 'none' : '';
+  document.getElementById('selectDeleteBtn').style.display = (mode === 'delete') ? '' : 'none';
+  // グリッドを再描画(モードでセルの選択可否が変わるため)
+  if (!document.getElementById('selectGridArea').classList.contains('hidden')) {
+    renderSelectGrid();
+  }
+}
+
+function clearRangeStartHighlight() {
+  const grid = document.getElementById('selectGrid');
+  if (!grid) return;
+  grid.querySelectorAll('td.cell.range-start, td.cell.range-start-remove').forEach(td => {
+    td.classList.remove('range-start');
+    td.classList.remove('range-start-remove');
+  });
+}
+
+// セルの選択ON/OFFを切り替え(クリックモード用)
+function toggleCell(td) {
+  const key = td.dataset.key;
+  const selCls = (selectMode === 'delete') ? 'selected-del' : 'selected';
+  if (state.selectedKeys.has(key)) {
+    state.selectedKeys.delete(key);
+    td.classList.remove(selCls);
+  } else {
+    state.selectedKeys.add(key);
+    td.classList.add(selCls);
+  }
+  updateSelectStats();
+}
+
+// グリッドのセルにクリックイベントを設定
+function setupGridSelect(grid) {
+  const cells = grid.querySelectorAll('td.cell[data-key]');
+  cells.forEach(td => {
+    td.addEventListener('click', () => {
+      if (selectMode === 'click') {
+        toggleCell(td);          // クリック追加
+      } else if (selectMode === 'delete') {
+        handleRangeClick(td);    // 削除モードも範囲選択方式
+      } else {
+        handleRangeClick(td);    // 範囲追加
+      }
+    });
+  });
+}
+
+// 範囲選択モードのクリック処理
+function handleRangeClick(td) {
+  const key = td.dataset.key;
+  if (rangeStartKey === null) {
+    // 1クリック目: 始点を決める。始点の選択状態でモードを決定
+    rangeStartKey = key;
+    clearRangeStartHighlight();
+    if (state.selectedKeys.has(key)) {
+      // 選択済みセルが始点 → この範囲を「解除」するモード
+      td.classList.add('range-start-remove');
+    } else {
+      // 未選択セルが始点 → この範囲を「追加」するモード
+      td.classList.add('range-start');
+    }
+  } else {
+    // 2クリック目: 始点〜終点の長方形を追加 or 解除
+    const removeMode = state.selectedKeys.has(rangeStartKey);
+    applyRectangle(rangeStartKey, key, removeMode);
+    rangeStartKey = null;
+    clearRangeStartHighlight();
+  }
+}
+
+// 始点キーと終点キーから長方形範囲を選択に追加/解除
+// removeMode=true なら範囲を解除、false なら範囲を追加
+function applyRectangle(startKey, endKey, removeMode) {
+  // キーは "YYYY-MM-DD HH:MM" 形式
+  const [startDate, startTime] = startKey.split(' ');
+  const [endDate, endTime] = endKey.split(' ');
+
+  // 日付・時刻それぞれのインデックスを、表示中のグリッド順で取得
+  const dates = state.selectGridDates.slice();
+  const times = ALL_TIMES.slice();
+
+  let dIdx1 = dates.indexOf(startDate);
+  let dIdx2 = dates.indexOf(endDate);
+  let tIdx1 = times.indexOf(startTime);
+  let tIdx2 = times.indexOf(endTime);
+  if (dIdx1 < 0 || dIdx2 < 0 || tIdx1 < 0 || tIdx2 < 0) return;
+
+  // 始点・終点の前後関係を正規化
+  if (dIdx1 > dIdx2) { const t = dIdx1; dIdx1 = dIdx2; dIdx2 = t; }
+  if (tIdx1 > tIdx2) { const t = tIdx1; tIdx1 = tIdx2; tIdx2 = t; }
+
+  const grid = document.getElementById('selectGrid');
+  const selCls = (selectMode === 'delete') ? 'selected-del' : 'selected';
+  let changed = 0;
+  for (let di = dIdx1; di <= dIdx2; di++) {
+    for (let ti = tIdx1; ti <= tIdx2; ti++) {
+      const key = dates[di] + ' ' + times[ti];
+      // 選択可能セル(data-key付き)だけを対象にする
+      const td = grid.querySelector('td.cell[data-key="' + cssEscape(key) + '"]');
+      if (td) {
+        if (removeMode) {
+          if (state.selectedKeys.has(key)) {
+            state.selectedKeys.delete(key);
+            td.classList.remove(selCls);
+            changed++;
+          }
+        } else {
+          state.selectedKeys.add(key);
+          td.classList.add(selCls);
+          changed++;
+        }
+      }
+    }
+  }
+  updateSelectStats();
+  if (changed > 0) {
+    showToast(changed + '枠を' + (removeMode ? '解除' : '選択') + 'しました', 'success');
+  }
+}
+
+// querySelector用に属性値をエスケープ(日付・時刻なので記号は少ないが念のため)
+function cssEscape(str) {
+  if (window.CSS && CSS.escape) return CSS.escape(str);
+  return str.replace(/["\\]/g, '\\$&');
+}
+
+function updateSelectStats() {
+  const count = state.selectedKeys.size;
+  const isDelete = (selectMode === 'delete');
+  document.getElementById('selectStats').textContent =
+    '選択中: ' + count + '枠' + (isDelete ? '(削除対象)' : '');
+  document.getElementById('selectAddBtn').disabled = count === 0;
+  const delBtn = document.getElementById('selectDeleteBtn');
+  if (delBtn) delBtn.disabled = count === 0;
+}
+
+function handleSelectAll(filter) {
+  // filter: 'all' | 'weekday' | 'weekend' | 'none'
+  const isDelete = (selectMode === 'delete');
+  if (filter === 'none') {
+    state.selectedKeys = new Set();
+  } else if (isDelete) {
+    // 削除モード: 既存枠(登録済み)を対象に全選択
+    state.selectGridDates.forEach(d => {
+      const weekend = isWeekend(d);
+      if (filter === 'weekday' && weekend) return;
+      if (filter === 'weekend' && !weekend) return;
+      ALL_TIMES.forEach(time => {
+        const key = d + ' ' + time;
+        if (state.existingKeys.has(key)) state.selectedKeys.add(key);
+      });
+    });
+  } else {
+    const now = Date.now();
+    state.selectGridDates.forEach(d => {
+      const weekend = isWeekend(d);
+      if (filter === 'weekday' && weekend) return;
+      if (filter === 'weekend' && !weekend) return;
+      const times = weekend ? WEEKEND_TIMES : WEEKDAY_TIMES;
+      times.forEach(time => {
+        const key = d + ' ' + time;
+        if (state.existingKeys.has(key)) return;
+        const slotDate = new Date(d + 'T' + time + ':00');
+        if (slotDate.getTime() < now) return;
+        state.selectedKeys.add(key);
+      });
+    });
+  }
+  renderSelectGrid();
+}
+
+async function handleSelectAdd() {
+  if (state.selectedKeys.size === 0) return;
+  const label = document.getElementById('selectLabel').value.trim();
+  const slots = Array.from(state.selectedKeys).map(key => {
+    const [date, time] = key.split(' ');
+    return { date, time, label };
+  });
+  if (!confirm(slots.length + '個の枠を追加しますか?')) return;
+  try {
+    const res = await apiCall('addSlots', { schoolId: state.currentSchoolId, slots });
+    if (!res.ok) throw new Error(res.error);
+    let msg = res.added + '個の枠を追加しました';
+    if (res.skipped > 0) msg += ' (重複のため' + res.skipped + '個はスキップ)';
+    showToast(msg, 'success');
+    state.selectedKeys = new Set();
+    await loadSlots();
+  } catch (err) { showToast(err.message, 'error'); }
+}
+
+// 範囲選択した既存枠をまとめて削除
+async function handleSelectDelete() {
+  if (state.selectedKeys.size === 0) return;
+  // 選択された枠のうち、予約が入っているものを事前にチェック
+  const selectedList = Array.from(state.selectedKeys);
+  const booked = [];
+  const empty = [];
+  selectedList.forEach(key => {
+    const [date, time] = key.split(' ');
+    const slot = state.slots.find(s => s.date === date && s.time === time);
+    if (slot && slot.booked > 0) booked.push(slot);
+    else if (slot) empty.push(slot);
+  });
+
+  // 予約済みが含まれる場合は警告
+  if (booked.length > 0) {
+    const names = booked.slice(0, 5).map(s =>
+      formatDateLabel(s.date) + ' ' + s.time).join('\n');
+    const more = booked.length > 5 ? '\n…ほか' + (booked.length - 5) + '件' : '';
+    const proceed = confirm(
+      '選択した枠のうち ' + booked.length + '件 に予約が入っています。\n\n' +
+      names + more + '\n\n' +
+      '予約が入っている枠は削除せずスキップし、\n' +
+      '空き枠 ' + empty.length + '件 のみ削除します。よろしいですか?\n\n' +
+      '(予約済みの枠を消したい場合は、先に「予約一覧」でキャンセルしてください)'
+    );
+    if (!proceed) return;
+  } else {
+    if (!confirm(empty.length + '個の枠を削除しますか?\nこの操作は元に戻せません。')) return;
+  }
+
+  // 削除対象は「空き枠」のみ。rowNum を集めてサーバーへ
+  const rowNums = empty.map(s => s.rowNum).filter(n => n);
+  if (rowNums.length === 0) {
+    showToast('削除できる空き枠がありませんでした', 'error');
+    return;
+  }
+  try {
+    const res = await apiCall('deleteSlots', {
+      schoolId: state.currentSchoolId,
+      rowNums: rowNums,
+    });
+    if (!res.ok) throw new Error(res.error);
+    let msg = res.deleted + '個の枠を削除しました';
+    if (booked.length > 0) msg += ' (予約済み' + booked.length + '件はスキップ)';
+    showToast(msg, 'success');
+    state.selectedKeys = new Set();
+    await loadSlots();
+  } catch (err) { showToast(err.message, 'error'); }
+}
+
+// ========== 個別追加 ==========
+async function handleSingleAdd() {
+  const date = document.getElementById('singleDate').value;
+  const time = document.getElementById('singleTime').value;
+  const label = document.getElementById('singleLabel').value.trim();
+  if (!date || !time) { showToast('日付と時刻を入力してください', 'error'); return; }
+  try {
+    const res = await apiCall('addSlots', {
+      schoolId: state.currentSchoolId,
+      slots: [{ date, time, label }],
+    });
+    if (!res.ok) throw new Error(res.error);
+    if (res.skipped > 0) {
+      showToast('同じ日時の枠がすでに存在するため追加されませんでした', 'error');
+    } else {
+      showToast('枠を追加しました', 'success');
+      document.getElementById('singleDate').value = '';
+      document.getElementById('singleTime').value = '';
+      document.getElementById('singleLabel').value = '';
+    }
+    await loadSlots();
+  } catch (err) { showToast(err.message, 'error'); }
+}
+
+// ========== システム設定(メンテナンス操作) ==========
+const MAINT_LABELS = {
+  init: 'シートの初期化・更新',
+  notifySheet: '通知先シートの作成',
+  testNotify: '通知テスト送信',
+  diagnose: 'リマインドの診断',
+  sendReminders: 'リマインドの手動送信',
+};
+
+const MAINT_CONFIRM = {
+  testNotify: '各校舎の通知先へテストメールを送信します。よろしいですか?',
+  sendReminders: '翌日の予約にリマインドメールを送信します。よろしいですか?',
+};
+
+async function handleMaint(action, btn) {
+  if (MAINT_CONFIRM[action] && !confirm(MAINT_CONFIRM[action])) return;
+  const out = document.getElementById('maintOutput');
+  const label = MAINT_LABELS[action] || action;
+  out.textContent = label + ' を実行しています…';
+  btn.disabled = true;
+  try {
+    const res = await apiCall('setup', { action });
+    out.textContent = label + ' の結果:\n\n' + JSON.stringify(res, null, 2);
+    if (res.ok === false) showToast(res.error || '実行に失敗しました', 'error');
+    else showToast(res.message || (label + ' が完了しました'), 'success');
+  } catch (err) {
+    out.textContent = label + ' でエラーが発生しました:\n\n' + err.message;
+    showToast(err.message, 'error');
+  } finally {
+    btn.disabled = false;
+  }
+}
+
+// ========== UI操作 ==========
+function switchTab(tabName) {
+  document.querySelectorAll('.tab').forEach(t => {
+    t.classList.toggle('active', t.dataset.tab === tabName);
+  });
+  document.getElementById('panel-bookings').classList.toggle('hidden', tabName !== 'bookings');
+  document.getElementById('panel-slots').classList.toggle('hidden', tabName !== 'slots');
+  document.getElementById('panel-maint').classList.toggle('hidden', tabName !== 'maint');
+}
+
+function showToast(msg, kind) {
+  const toast = document.getElementById('toast');
+  toast.textContent = msg;
+  toast.classList.remove('error', 'success');
+  if (kind) toast.classList.add(kind);
+  toast.classList.add('show');
+  setTimeout(() => toast.classList.remove('show'), 3000);
+}
+
+function escapeHtml(s) {
+  if (s == null) return '';
+  return String(s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+}
+function parseYMD(str) {
+  const [y, m, d] = str.split('-').map(Number);
+  return new Date(y, m - 1, d);
+}
+function formatDateLabel(dateStr) {
+  const d = parseYMD(dateStr);
+  const weekdays = ['日','月','火','水','木','金','土'];
+  return (d.getMonth()+1) + '/' + d.getDate() + '(' + weekdays[d.getDay()] + ')';
+}
+function isPast(dateStr, timeStr) {
+  const [h, m] = timeStr.split(':').map(Number);
+  const d = parseYMD(dateStr);
+  d.setHours(h, m, 0, 0);
+  return d.getTime() < Date.now();
+}
+
+// ========== ログイン認証(サーバー側で検証) ==========
+let initialized = false;
+
+async function init() {
+  // サーバーにログイン状態を問い合わせる
+  try {
+    const res = await fetch('/api/admin/auth');
+    const data = await res.json();
+    if (data.loggedIn) {
+      hideLoginScreen();
+      doInit();
+      return;
+    }
+  } catch (e) {
+    // 通信できない場合もログイン画面を出す
+  }
+  showLoginScreen();
+}
+
+function showLoginScreen() {
+  document.getElementById('loginOverlay').classList.remove('hidden');
+  setTimeout(() => {
+    const idInput = document.getElementById('loginId');
+    if (idInput) idInput.focus();
+  }, 100);
+}
+
+function hideLoginScreen() {
+  document.getElementById('loginOverlay').classList.add('hidden');
+}
+
+async function handleLogin() {
+  const id = document.getElementById('loginId').value.trim();
+  const pw = document.getElementById('loginPw').value;
+  const err = document.getElementById('loginError');
+  const btn = document.getElementById('loginBtn');
+  btn.disabled = true;
+  btn.textContent = 'ログイン中…';
+  try {
+    const res = await fetch('/api/admin/auth', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ action: 'login', id, password: pw }),
+    });
+    const data = await res.json();
+    if (data.ok && data.loggedIn) {
+      err.classList.remove('show');
+      document.getElementById('loginPw').value = '';
+      hideLoginScreen();
+      doInit();
+    } else {
+      err.textContent = data.error || 'IDまたはパスワードが正しくありません';
+      err.classList.add('show');
+      document.getElementById('loginPw').value = '';
+      document.getElementById('loginPw').focus();
+    }
+  } catch (e) {
+    err.textContent = 'サーバーに接続できませんでした';
+    err.classList.add('show');
+  } finally {
+    btn.disabled = false;
+    btn.textContent = 'ログイン';
+  }
+}
+
+async function handleLogout() {
+  if (!confirm('ログアウトしますか?')) return;
+  try {
+    await fetch('/api/admin/auth', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ action: 'logout' }),
+    });
+  } catch (e) {}
+  location.reload();
+}
+
+// ログイン画面のイベント設定(scriptがbodyの末尾にあるので要素は既に存在)
+(function setupLoginEvents() {
+  const loginBtn = document.getElementById('loginBtn');
+  if (loginBtn) loginBtn.addEventListener('click', handleLogin);
+  ['loginId', 'loginPw'].forEach(id => {
+    const el = document.getElementById(id);
+    if (el) el.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter') handleLogin();
+    });
+  });
+  const logoutBtn = document.getElementById('logoutBtn');
+  if (logoutBtn) logoutBtn.addEventListener('click', handleLogout);
+})();
+
+function doInit() {
+  // ログアウト→再ログインでイベントが二重登録されないようにする
+  if (initialized) { loadAll(); return; }
+  initialized = true;
+
+  loadSchools();
+  const today = new Date();
+  const week = new Date();
+  week.setDate(week.getDate() + 7);
+  const fmtDate = d => d.getFullYear() + '-' + String(d.getMonth()+1).padStart(2,'0') + '-' + String(d.getDate()).padStart(2,'0');
+  document.getElementById('selectStartDate').value = fmtDate(today);
+  document.getElementById('selectEndDate').value = fmtDate(week);
+  document.getElementById('singleDate').value = fmtDate(today);
+
+  document.getElementById('schoolSelect').addEventListener('change', async (e) => {
+    state.currentSchoolId = e.target.value;
+    try { if (state.currentSchoolId) localStorage.setItem(LAST_SCHOOL_KEY, state.currentSchoolId); } catch(err) {}
+    state.selectGridDates = [];
+    state.selectedKeys = new Set();
+    document.getElementById('selectGridArea').classList.add('hidden');
+    await loadAll();
+  });
+  document.getElementById('reloadBtn').addEventListener('click', loadAll);
+  document.querySelectorAll('.tab').forEach(t => {
+    t.addEventListener('click', () => switchTab(t.dataset.tab));
+  });
+  ['periodFilter', 'statusFilter'].forEach(id => {
+    document.getElementById(id).addEventListener('change', renderBookings);
+  });
+  document.getElementById('searchInput').addEventListener('input', renderBookings);
+  document.getElementById('slotPeriodFilter').addEventListener('change', renderSlots);
+  document.getElementById('singleAddBtn').addEventListener('click', handleSingleAdd);
+
+  // 選択式追加
+  document.getElementById('selectPreviewBtn').addEventListener('click', handlePreviewSelect);
+  document.getElementById('selectAll').addEventListener('click', () => handleSelectAll('all'));
+  document.getElementById('selectNone').addEventListener('click', () => handleSelectAll('none'));
+  document.getElementById('selectWeekday').addEventListener('click', () => handleSelectAll('weekday'));
+  document.getElementById('selectWeekend').addEventListener('click', () => handleSelectAll('weekend'));
+  document.getElementById('selectAddBtn').addEventListener('click', handleSelectAdd);
+
+  // 選択モード切替トグル
+  document.getElementById('modeClickBtn').addEventListener('click', () => setSelectMode('click'));
+  document.getElementById('modeRangeBtn').addEventListener('click', () => setSelectMode('range'));
+  document.getElementById('modeDeleteBtn').addEventListener('click', () => setSelectMode('delete'));
+  document.getElementById('selectDeleteBtn').addEventListener('click', handleSelectDelete);
+
+  // モーダル
+  document.getElementById('modalCloseBtn').addEventListener('click', closeBookingModal);
+  document.getElementById('bookingModal').addEventListener('click', (e) => {
+    if (e.target.id === 'bookingModal') closeBookingModal();
+  });
+  document.getElementById('modalRescheduleBtn').addEventListener('click', handleReschedule);
+  document.getElementById('modalCancelBookingBtn').addEventListener('click', () => {
+    if (currentModalBookingId) handleAdminCancel(currentModalBookingId);
+  });
+
+  // カレンダー出力
+  document.getElementById('exportCalendarBtn').addEventListener('click', openExportModal);
+  document.getElementById('exportCloseBtn').addEventListener('click', closeExportModal);
+  document.getElementById('exportCancelBtn').addEventListener('click', closeExportModal);
+  document.getElementById('exportModal').addEventListener('click', (e) => {
+    if (e.target.id === 'exportModal') closeExportModal();
+  });
+  document.getElementById('exportRunBtn').addEventListener('click', handleExportRun);
+
+  // システム設定
+  document.querySelectorAll('[data-maint]').forEach(btn => {
+    btn.addEventListener('click', () => handleMaint(btn.dataset.maint, btn));
+  });
+}
+
+// ========== カレンダー出力 ==========
+
+function openExportModal() {
+  if (!state.currentSchoolId) {
+    showToast('校舎を選択してください', 'error');
+    return;
+  }
+  // 校舎名を表示
+  const school = state.schools.find(s => s.id === state.currentSchoolId);
+  document.getElementById('exportSchoolName').textContent = school ? school.name : '―';
+
+  // デフォルト期間:今月の月初〜月末
+  const today = new Date();
+  const startStr = today.getFullYear() + '-' +
+    String(today.getMonth() + 1).padStart(2, '0') + '-01';
+  const lastDay = new Date(today.getFullYear(), today.getMonth() + 1, 0);
+  const endStr = lastDay.getFullYear() + '-' +
+    String(lastDay.getMonth() + 1).padStart(2, '0') + '-' +
+    String(lastDay.getDate()).padStart(2, '0');
+  document.getElementById('exportStartDate').value = startStr;
+  document.getElementById('exportEndDate').value = endStr;
+
+  // 初期表示状態(エラー・進行・成功は隠す)
+  document.getElementById('exportError').style.display = 'none';
+  document.getElementById('exportProgress').style.display = 'none';
+  document.getElementById('exportSuccess').style.display = 'none';
+  const runBtn = document.getElementById('exportRunBtn');
+  runBtn.disabled = false;
+  runBtn.style.display = '';
+  runBtn.textContent = '出力する';
+
+  document.getElementById('exportModal').classList.add('show');
+}
+
+function closeExportModal() {
+  document.getElementById('exportModal').classList.remove('show');
+}
+
+async function handleExportRun() {
+  const startDate = document.getElementById('exportStartDate').value;
+  const endDate = document.getElementById('exportEndDate').value;
+  const errBox = document.getElementById('exportError');
+  errBox.style.display = 'none';
+  if (!startDate || !endDate) {
+    errBox.textContent = '開始日と終了日を指定してください';
+    errBox.style.display = 'block';
+    return;
+  }
+  if (startDate > endDate) {
+    errBox.textContent = '開始日が終了日より後になっています';
+    errBox.style.display = 'block';
+    return;
+  }
+  // 進行表示
+  document.getElementById('exportProgress').style.display = 'block';
+  document.getElementById('exportSuccess').style.display = 'none';
+  const runBtn = document.getElementById('exportRunBtn');
+  runBtn.disabled = true;
+  runBtn.textContent = '出力中…';
+  try {
+    const res = await apiCall('exportCalendar', {
+      schoolId: state.currentSchoolId,
+      startDate: startDate,
+      endDate: endDate,
+    });
+    if (!res.ok) throw new Error(res.error || '出力に失敗しました');
+    // 成功表示
+    document.getElementById('exportProgress').style.display = 'none';
+    document.getElementById('exportSuccessDetail').textContent =
+      '対象期間の予約 ' + res.count + '件 を書き出しました。' + (res.warning || '');
+    const link = document.getElementById('exportOpenLink');
+    link.href = res.url;
+    document.getElementById('exportSuccess').style.display = 'block';
+    runBtn.style.display = 'none';
+    // 自動で新規タブを開く
+    window.open(res.url, '_blank', 'noopener');
+  } catch (err) {
+    document.getElementById('exportProgress').style.display = 'none';
+    errBox.textContent = err.message || '出力に失敗しました';
+    errBox.style.display = 'block';
+    runBtn.disabled = false;
+    runBtn.textContent = '出力する';
+  }
+}
+
+init();
+</script>
+</body>
+</html>
