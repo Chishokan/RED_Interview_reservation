@@ -83,6 +83,47 @@ await test('日付が Date 型・時刻が文字列でも読める(GAS時代の�
   assert.equal(slots[0].date, D1);
 });
 
+// スプレッドシートの日付・時刻セルは、値だけを読むとシリアル値で返ってくる。
+// 実際のシートは日付型で保存されているため、この形でも動く必要がある。
+const serialDate = (ymd) => {
+  const [y, m, d] = ymd.split('-').map(Number);
+  return (Date.UTC(y, m - 1, d) - Date.UTC(1899, 11, 30)) / 86400000;
+};
+const serialTime = (hm) => {
+  const [h, mi] = hm.split(':').map(Number);
+  return (h * 60 + mi) / 1440;
+};
+
+await test('日付・時刻がシリアル値でも正しく読める(実データの保存形式)', async () => {
+  setup(
+    [[serialDate(D1), serialTime('14:00'), '', true, 1], [serialDate(D1), serialTime('15:30'), '', true, 1]],
+    [['b1', serialDate(D1), serialTime('14:00'), '子A', '親A', 'a@x.jp', '小1', '',
+      'confirmed', serialDate(D1) + serialTime('09:05'), '', serialDate(D1), false, '', '']]
+  );
+  // 14:00 は予約済みなので 15:30 だけが空いている
+  const slots = await store.getAvailableSlots('hirota');
+  assert.deepEqual(slots.map(s => s.time), ['15:30']);
+
+  const bookings = await store.getAllBookings('hirota');
+  assert.equal(bookings[0].date, D1);
+  assert.equal(bookings[0].time, '14:00');
+  // 日時セルは数字ではなく読める形で返す
+  assert.equal(bookings[0].createdAt, D1 + ' 09:05');
+  assert.equal(bookings[0].reminderSent, D1);
+});
+
+await test('公開フラグが文字列 TRUE/FALSE でも判定できる', async () => {
+  setup([[D1, '14:00', '', 'TRUE', 1], [D1, '15:00', '', 'FALSE', 1]]);
+  const slots = await store.getAvailableSlots('hirota');
+  assert.deepEqual(slots.map(s => s.time), ['14:00']);
+});
+
+await test('面談実施が文字列 TRUE でも判定できる', async () => {
+  setup([], [['b1', D1, '14:00', 'A', 'PA', 'a@x.jp', '', '', 'confirmed', '', '', '', 'TRUE', 'メモ', '']]);
+  const bookings = await store.getAllBookings('hirota');
+  assert.equal(bookings[0].interviewDone, true);
+});
+
 console.log('\n== 予約の作成 ==');
 await test('予約が作成され、シートに1行追記される', async () => {
   setup([[D1, '14:00', '', true, 1]]);

@@ -1,7 +1,7 @@
 /** 日付・時刻ユーティリティと、カレンダー出力のレイアウト計算のテスト */
 import assert from 'node:assert/strict';
 import {
-  formatDate, formatTime, makeKey, formatJapaneseDate,
+  formatDate, formatTime, formatDateTime, makeKey, formatJapaneseDate,
   zonedToEpochMs, todayStr, addDays, nowStamp,
 } from '../lib/format.js';
 import { buildMonthRequests } from '../lib/calendar-export.js';
@@ -46,6 +46,16 @@ test('日付と時刻からキーを作れる', () => {
 test('日本語の日付表記に変換できる', () => {
   assert.equal(formatJapaneseDate('2026-09-07'), '2026年9月7日(月)');
   assert.equal(formatJapaneseDate('2026-01-01'), '2026年1月1日(木)');
+});
+
+test('日時セルを読みやすい文字列にする(シリアル値でも数字を出さない)', () => {
+  // 予約日時などの日時セルは、値だけ読むとシリアル値で返ってくる
+  assert.equal(formatDateTime(46164 + (15 * 60 + 38) / 1440), '2026-05-22 15:38');
+  assert.equal(formatDateTime(46169), '2026-05-27');        // 時刻を持たないセルは日付だけ
+  assert.equal(formatDateTime('2026-05-22 15:38'), '2026-05-22 15:38');
+  assert.equal(formatDateTime(new Date(2026, 4, 22, 15, 38)), '2026-05-22 15:38');
+  assert.equal(formatDateTime(''), '');
+  assert.equal(formatDateTime(null), '');
 });
 
 console.log('\n== タイムゾーンの扱い(サーバーはUTCで動く) ==');
