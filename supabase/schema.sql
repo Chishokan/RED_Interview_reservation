@@ -220,7 +220,15 @@ revoke all on public.slot_availability      from anon, authenticated;
 revoke all on public.schools                from anon, authenticated;
 revoke all on public.slots                  from anon, authenticated;
 revoke all on public.bookings               from anon, authenticated;
+
+-- 関数は既定で PUBLIC に実行権限が付くため、PUBLIC ごと剥がしてから
+-- サーバー(service_role)にだけ与え直す。
 revoke execute on function public.create_booking(text, date, time, text, text, text, text, text)
-  from anon, authenticated;
-revoke execute on function public.update_slot_capacity(bigint, int) from anon, authenticated;
-revoke execute on function public.delete_empty_slots(bigint[])      from anon, authenticated;
+  from public, anon, authenticated;
+revoke execute on function public.update_slot_capacity(bigint, int) from public, anon, authenticated;
+revoke execute on function public.delete_empty_slots(bigint[])      from public, anon, authenticated;
+
+grant execute on function public.create_booking(text, date, time, text, text, text, text, text)
+  to service_role;
+grant execute on function public.update_slot_capacity(bigint, int) to service_role;
+grant execute on function public.delete_empty_slots(bigint[])      to service_role;
