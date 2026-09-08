@@ -81,7 +81,7 @@ Supabaseの **Project Settings → API** で次の2つを確認します。
 | `SUPABASE_URL` | SupabaseのProject URL |
 | `SUPABASE_SERVICE_ROLE_KEY` | service_role キー |
 | `ADMIN_ID` / `ADMIN_PASSWORD` | 管理画面のログインID・パスワード |
-| `SESSION_SECRET` | ログインCookieの署名鍵。`openssl rand -base64 32` などで生成した長い文字列 |
+| `SESSION_SECRET` | ログインCookieの署名鍵。`openssl rand -base64 32` などで生成した長いランダムな文字列(24文字以上。どこかから取得する値ではなく、自分で作ります) |
 | `CRON_SECRET` | リマインドの定期実行を外部から勝手に叩かれないようにするトークン |
 
 メール送信は `RESEND_API_KEY`(推奨)か、`SMTP_HOST` などのSMTP設定のどちらかを入れてください。
@@ -199,7 +199,7 @@ tests/                   テスト(npm test)
 
 ```bash
 npm install
-npm test                 # 107件のテストを実行(Supabaseへの接続は不要)
+npm test                 # 108件のテストを実行(Supabaseへの接続は不要)
 
 # ローカルで動かす場合
 npm i -g vercel

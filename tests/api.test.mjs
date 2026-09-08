@@ -9,7 +9,7 @@ import { fakeClient, resetDb, seedSchools, seedSlots, seedBookings, dump } from 
 process.env.TIMEZONE = 'Asia/Tokyo';
 process.env.ADMIN_ID = 'staff';
 process.env.ADMIN_PASSWORD = 'pw123';
-process.env.SESSION_SECRET = 'test-secret';
+process.env.SESSION_SECRET = 'test-secret-long-enough-for-signing';
 
 const { setDbForTesting } = await import('../lib/db.js');
 setDbForTesting(fakeClient);

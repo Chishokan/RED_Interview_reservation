@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 
 process.env.ADMIN_ID = 'staff';
 process.env.ADMIN_PASSWORD = 'secret-pw';
-process.env.SESSION_SECRET = 'test-secret-key';
+process.env.SESSION_SECRET = 'test-secret-key-long-enough-for-signing';
 
 const auth = await import('../lib/auth.js');
 
@@ -35,6 +35,17 @@ test('環境変数が未設定なら例外になる(認証成功と取り違え�
   process.env.ADMIN_PASSWORD = saved;
 });
 
+test('署名鍵が未設定・短すぎる場合はエラーになる', () => {
+  const saved = process.env.SESSION_SECRET;
+  delete process.env.SESSION_SECRET;
+  assert.throws(() => auth.createSessionToken(), /SESSION_SECRET が設定されていません/);
+  process.env.SESSION_SECRET = 'short';
+  assert.throws(() => auth.createSessionToken(), /短すぎます\(5文字\)/);
+  process.env.SESSION_SECRET = saved;
+  // 十分な長さがあれば通る
+  assert.equal(typeof auth.createSessionToken(), 'string');
+});
+
 test('発行したセッショントークンは検証を通る', () => {
   assert.equal(auth.verifySessionToken(auth.createSessionToken()), true);
 });
@@ -52,7 +63,7 @@ test('改ざんされたトークンは弾かれる', () => {
 test('別の秘密鍵で署名されたトークンは弾かれる', () => {
   const token = auth.createSessionToken();
   const saved = process.env.SESSION_SECRET;
-  process.env.SESSION_SECRET = 'different-secret';
+  process.env.SESSION_SECRET = 'different-secret-also-long-enough-here';
   assert.equal(auth.verifySessionToken(token), false);
   process.env.SESSION_SECRET = saved;
 });
