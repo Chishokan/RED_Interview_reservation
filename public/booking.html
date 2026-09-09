@@ -687,8 +687,16 @@
 <div class="toast" id="toast"></div>
 
 <script>
-// URLの先頭の区切り(/red、/chutobu など)がその部門を表す
-const DEPT = (location.pathname.split('/').filter(Boolean)[0] || '').toLowerCase();
+/**
+ * 部門の判定。
+ * 通常は URL の先頭の区切り(/red、/chutobu など)を使う。
+ * 直接 booking.html を開いた場合などに備えて ?dept=red も受け付ける。
+ */
+const DEPT = (() => {
+  const seg = (location.pathname.split('/').filter(Boolean)[0] || '');
+  if (seg && !seg.endsWith('.html')) return seg.toLowerCase();
+  return (new URLSearchParams(location.search).get('dept') || '').toLowerCase();
+})();
 // 保存する値は部門ごとに分ける(別部門の校舎が復元されないようにするため)
 const LAST_EMAIL_KEY = 'booking_last_email_' + DEPT;
 const LAST_SCHOOL_KEY = 'booking_last_school_' + DEPT;

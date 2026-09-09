@@ -1,24 +1,47 @@
 {
   "$schema": "https://openapi.vercel.sh/vercel.json",
-  "cleanUrls": true,
+  "cleanUrls": false,
   "trailingSlash": false,
   "functions": {
-    "api/admin/setup.js": { "maxDuration": 60 },
-    "api/admin/export-calendar.js": { "maxDuration": 60 },
-    "api/cron/reminders.js": { "maxDuration": 60 }
+    "api/admin/setup.js": {
+      "maxDuration": 60
+    },
+    "api/admin/export-calendar.js": {
+      "maxDuration": 60
+    },
+    "api/cron/reminders.js": {
+      "maxDuration": 60
+    }
   },
   "rewrites": [
-    { "source": "/:dept/admin", "destination": "/admin.html" },
-    { "source": "/:dept", "destination": "/booking.html" }
+    {
+      "source": "/:dept/admin",
+      "destination": "/admin.html"
+    },
+    {
+      "source": "/:dept",
+      "destination": "/booking.html"
+    }
   ],
   "crons": [
-    { "path": "/api/cron/reminders", "schedule": "0 1 * * *" },
-    { "path": "/api/cron/reminders", "schedule": "0 10 * * *" }
+    {
+      "path": "/api/cron/reminders",
+      "schedule": "0 1 * * *"
+    },
+    {
+      "path": "/api/cron/reminders",
+      "schedule": "0 10 * * *"
+    }
   ],
   "headers": [
     {
       "source": "/api/(.*)",
-      "headers": [{ "key": "Cache-Control", "value": "no-store, max-age=0" }]
+      "headers": [
+        {
+          "key": "Cache-Control",
+          "value": "no-store, max-age=0"
+        }
+      ]
     }
   ]
 }
