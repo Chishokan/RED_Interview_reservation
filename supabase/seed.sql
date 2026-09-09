@@ -47,7 +47,9 @@ insert into public.schools (id, name, department_id, sort_order) values
   ('chutobu_sasebo', '佐世保駅前校', 'chutobu', 1),
   ('chutobu_hino',   '日野校',       'chutobu', 2),
   ('chutobu_ono',    '大野校',       'chutobu', 3),
-  ('chutobu_hiu',    '日宇校',       'chutobu', 4)
+  ('chutobu_hiu',    '日宇校',       'chutobu', 4),
+  -- 校舎ではなくコース。保護者の選択肢としては校舎と同じ扱いになる
+  ('chutobu_kenritsu', '県立中受検対策コース', 'chutobu', 5)
 on conflict (id) do update
   set name          = excluded.name,
       department_id = excluded.department_id,

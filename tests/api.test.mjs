@@ -345,7 +345,7 @@ await test('部門ごとに違う校舎・学年が返る', async () => {
   const chu = await call('/api/schools?dept=chutobu');
   assert.equal(chu.data.department.name, '中等部');
   assert.deepEqual(chu.data.schools.map((s) => s.name),
-    ['佐世保駅前校', '日野校', '大野校', '日宇校']);
+    ['佐世保駅前校', '日野校', '大野校', '日宇校', '県立中受検対策コース']);
   // 中等部の学年に小学1年は無い
   assert.ok(!chu.data.department.grades.includes('小学1年'));
 });

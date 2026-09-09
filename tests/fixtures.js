@@ -32,4 +32,5 @@ export const SCHOOLS = [
   { id: 'chutobu_hino',   name: '日野校',       department_id: 'chutobu', sort_order: 2 },
   { id: 'chutobu_ono',    name: '大野校',       department_id: 'chutobu', sort_order: 3 },
   { id: 'chutobu_hiu',    name: '日宇校',       department_id: 'chutobu', sort_order: 4 },
+  { id: 'chutobu_kenritsu', name: '県立中受検対策コース', department_id: 'chutobu', sort_order: 5 },
 ];
