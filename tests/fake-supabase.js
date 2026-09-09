@@ -8,19 +8,32 @@
  *       maybeSingle/head+count、rpc()(schema.sql の3つの関数と同じ挙動)
  */
 
-const tables = { schools: [], slots: [], bookings: [] };
+const tables = { departments: [], schools: [], slots: [], bookings: [] };
 let nextSlotId = 1;
 
 export function resetDb() {
+  tables.departments = [];
   tables.schools = [];
   tables.slots = [];
   tables.bookings = [];
   nextSlotId = 1;
 }
 
+export function seedDepartments(rows) {
+  tables.departments = rows.map((r) => ({
+    accent_color: '#3182ce',
+    grades: [],
+    sort_order: 0,
+    active: true,
+    ...r,
+  }));
+}
+
 export function seedSchools(rows) {
   tables.schools = rows.map((r) => ({
+    department_id: 'red',
     notify_email: '',
+    line_works_channel_id: '',
     sort_order: 0,
     active: true,
     ...r,

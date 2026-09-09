@@ -6,11 +6,12 @@
  *  1. スプレッドシートを開き、ファイル → ダウンロード → Microsoft Excel (.xlsx)
  *     でダウンロードする(1ファイルに全シートが入ります)
  *  2. .env.local に SUPABASE_URL と SUPABASE_SERVICE_ROLE_KEY を設定する
- *  3. npm run import:xlsx -- ./ダウンロードしたファイル.xlsx
+ *  3. npm run import:xlsx -- ./ダウンロードしたファイル.xlsx --dept red
  *
  * 何度実行しても同じ結果になります(予約IDと枠の日時で重複を判定します)。
  *
  * 【オプション】
+ *  --dept <部門>    どの部門のデータかを指定する(既定: red)
  *  --dry-run        DBには書き込まず、件数だけを表示する
  *  --sql <出力先>   DBに接続せず、SupabaseのSQL Editorに貼り付けられる
  *                   SQLファイルを書き出す(接続情報が不要になります)
@@ -21,7 +22,39 @@ import path from 'node:path';
 import ExcelJS from 'exceljs';
 import { createClient } from '@supabase/supabase-js';
 import { formatDate, formatTime, formatDateTime, TIMEZONE, zonedToEpochMs } from '../lib/format.js';
-import { DEFAULT_SCHOOLS } from '../lib/schools.js';
+
+/**
+ * 部門ごとの校舎の定義。supabase/seed.sql と同じ内容。
+ * シート名は「<校舎名>予約枠」「<校舎名>予約データ」という規約になっている。
+ *
+ * 中等部の「日野校」「大野校」はRED部門にも同名IDの校舎があるため、
+ * DB上のIDは chutobu_ を付けて区別している(sheet がシート名の元になる名前)。
+ */
+export const DEPARTMENTS = {
+  red: {
+    name: 'RED部門',
+    hasNotifySheet: true,
+    schools: [
+      { id: 'hirota',   sheet: 'RED広田教室',     sort_order: 1 },
+      { id: 'kyomachi', sheet: 'RED京町教室',     sort_order: 2 },
+      { id: 'hino',     sheet: 'RED日野教室',     sort_order: 3 },
+      { id: 'saza',     sheet: 'RED佐々教室',     sort_order: 4 },
+      { id: 'oshima',   sheet: 'RED西海大島教室', sort_order: 5 },
+      { id: 'ono',      sheet: 'RED大野教室',     sort_order: 6 },
+      { id: 'nexta',    sheet: 'ネクスタ',        sort_order: 7 },
+    ],
+  },
+  chutobu: {
+    name: '中等部',
+    hasNotifySheet: false,
+    schools: [
+      { id: 'chutobu_sasebo', sheet: '佐世保駅前校', sort_order: 1 },
+      { id: 'chutobu_hino',   sheet: '日野校',       sort_order: 2 },
+      { id: 'chutobu_ono',    sheet: '大野校',       sort_order: 3 },
+      { id: 'chutobu_hiu',    sheet: '日宇校',       sort_order: 4 },
+    ],
+  },
+};
 
 // ---------- 引数と環境変数 ----------
 const isMain = process.argv[1] && process.argv[1].endsWith('import-from-xlsx.mjs');
@@ -29,8 +62,11 @@ const args = process.argv.slice(2);
 const dryRun = args.includes('--dry-run');
 const sqlIndex = args.indexOf('--sql');
 const sqlOut = sqlIndex >= 0 ? args[sqlIndex + 1] : null;
-// --sql の値は「取り込むファイル」ではないので、位置引数の候補から除く
-const positional = args.filter((a, i) => !a.startsWith('--') && i !== sqlIndex + 1);
+const deptIndex = args.indexOf('--dept');
+const deptSlug = deptIndex >= 0 ? args[deptIndex + 1] : 'red';
+// オプションの値は「取り込むファイル」ではないので、位置引数の候補から除く
+const optionValueIndexes = new Set([sqlIndex + 1, deptIndex + 1].filter((i) => i > 0));
+const positional = args.filter((a, i) => !a.startsWith('--') && !optionValueIndexes.has(i));
 const filePath = positional[0];
 // SQLを書き出すだけならDBへの接続情報は要らない
 const needsDb = !dryRun && !sqlOut;
@@ -43,6 +79,12 @@ if (isMain) {
   }
   if (!fs.existsSync(filePath)) {
     console.error('ファイルが見つかりません: ' + filePath);
+    process.exit(1);
+  }
+  if (!DEPARTMENTS[deptSlug]) {
+    console.error(
+      `--dept が不正です: ${deptSlug}(指定できるのは ${Object.keys(DEPARTMENTS).join(' / ')})`
+    );
     process.exit(1);
   }
   loadEnvLocal();
@@ -75,8 +117,8 @@ function loadEnvLocal() {
 }
 
 // ---------- シート名から校舎を割り出す ----------
-const slotsSheetName = (s) => s.name + '予約枠';
-const bookingsSheetName = (s) => s.name + '予約データ';
+const slotsSheetName = (s) => s.sheet + '予約枠';
+const bookingsSheetName = (s) => s.sheet + '予約データ';
 
 /** セルの値を素の値に均す(数式セルや書式つきテキストにも対応) */
 function cellValue(cell) {
@@ -137,22 +179,28 @@ async function insertInChunks(table, rows, options, label) {
  * スプレッドシート(xlsx)の中身を、DBに入れる形に変換する。
  * 副作用が無いのでテストから直接呼べる。
  */
-export function parseWorkbook(workbook) {
-  // 校舎マスタ + 通知先
+export function parseWorkbook(workbook, deptSlug = 'red') {
+  const department = DEPARTMENTS[deptSlug];
+  if (!department) throw new Error('未知の部門です: ' + deptSlug);
+
+  // 校舎マスタ + 通知先(通知先シートがある部門のみ)
   const notifyBySchool = new Map();
-  const notifySheet = workbook.getWorksheet('通知先');
-  if (notifySheet) {
-    notifySheet.eachRow((row, n) => {
-      if (n === 1) return; // 見出し行
-      const [id, , email] = rowValues(row, 3);
-      const schoolId = String(id || '').trim();
-      if (schoolId) notifyBySchool.set(schoolId, String(email || '').trim());
-    });
+  if (department.hasNotifySheet) {
+    const notifySheet = workbook.getWorksheet('通知先');
+    if (notifySheet) {
+      notifySheet.eachRow((row, n) => {
+        if (n === 1) return; // 見出し行
+        const [id, , email] = rowValues(row, 3);
+        const schoolId = String(id || '').trim();
+        if (schoolId) notifyBySchool.set(schoolId, String(email || '').trim());
+      });
+    }
   }
 
-  const schools = DEFAULT_SCHOOLS.map((s) => ({
+  const schools = department.schools.map((s) => ({
     id: s.id,
-    name: s.name,
+    name: s.sheet,
+    department_id: deptSlug,
     sort_order: s.sort_order,
     notify_email: notifyBySchool.get(s.id) || '',
     active: true,
@@ -162,7 +210,7 @@ export function parseWorkbook(workbook) {
   const bookings = [];
   const perSchool = [];
 
-  for (const school of DEFAULT_SCHOOLS) {
+  for (const school of department.schools) {
     const slotSheet = workbook.getWorksheet(slotsSheetName(school));
     const bookingSheet = workbook.getWorksheet(bookingsSheetName(school));
 
@@ -231,21 +279,21 @@ export function parseWorkbook(workbook) {
     if (!slotSheet) missing.push('予約枠シートなし');
     if (!bookingSheet) missing.push('予約データシートなし');
     perSchool.push({
-      school: school.name,
+      school: school.sheet,
       slots: mySlots.length,
       bookings: myBookings.length,
       missing,
     });
   }
 
-  const known = new Set(['通知先']);
-  DEFAULT_SCHOOLS.forEach((s) => {
+  const known = new Set(department.hasNotifySheet ? ['通知先'] : []);
+  department.schools.forEach((s) => {
     known.add(slotsSheetName(s));
     known.add(bookingsSheetName(s));
   });
   const unknownSheets = workbook.worksheets.map((w) => w.name).filter((n) => !known.has(n));
 
-  return { schools, slots, bookings, perSchool, unknownSheets };
+  return { deptSlug, departmentName: department.name, schools, slots, bookings, perSchool, unknownSheets };
 }
 
 // ---------- SQLの書き出し ----------
@@ -281,10 +329,10 @@ function buildInsert(table, columns, rows, conflictClause, chunkSize = 100) {
 export function buildSql(parsed) {
   const header = [
     '-- ============================================================',
-    '-- 既存データの移行用SQL(自動生成)',
+    `-- 既存データの移行用SQL(自動生成) / 部門: ${parsed.departmentName}`,
     '--',
     '-- SupabaseのSQL Editorに貼り付けて実行してください。',
-    '-- 先に schema.sql を実行しておく必要があります。',
+    '-- 先に schema.sql と seed.sql を実行しておく必要があります。',
     '-- 同じ予約・同じ日時の枠は二重に入らないので、何度実行しても安全です。',
     `-- 校舎 ${parsed.schools.length}件 / 予約枠 ${parsed.slots.length}件 / 予約 ${parsed.bookings.length}件`,
     '-- ============================================================',
@@ -295,12 +343,15 @@ export function buildSql(parsed) {
 
   const schools = buildInsert(
     'schools',
-    ['id', 'name', 'sort_order', 'notify_email', 'active'],
+    ['id', 'name', 'department_id', 'sort_order', 'notify_email', 'active'],
     parsed.schools,
     'on conflict (id) do update set\n' +
       '  name = excluded.name,\n' +
+      '  department_id = excluded.department_id,\n' +
       '  sort_order = excluded.sort_order,\n' +
-      '  notify_email = excluded.notify_email'
+      // 通知先は管理画面から設定できるので、空の値では上書きしない
+      "  notify_email = case when excluded.notify_email <> '' " +
+      'then excluded.notify_email else public.schools.notify_email end'
   );
 
   const slots = buildInsert(
@@ -339,11 +390,14 @@ export function buildSql(parsed) {
 
 // ---------- 本体 ----------
 async function main() {
-  console.log(`読み込み中: ${filePath}${dryRun ? ' (--dry-run: DBには書き込みません)' : ''}\n`);
+  console.log(
+    `読み込み中: ${filePath}  部門: ${deptSlug}` +
+      `${dryRun ? '  (--dry-run: DBには書き込みません)' : ''}\n`
+  );
   const workbook = new ExcelJS.Workbook();
   await workbook.xlsx.readFile(filePath);
 
-  const parsed = parseWorkbook(workbook);
+  const parsed = parseWorkbook(workbook, deptSlug);
 
   if (sqlOut) {
     fs.writeFileSync(sqlOut, buildSql(parsed), 'utf8');
@@ -357,6 +411,7 @@ async function main() {
   await insertInChunks('bookings', parsed.bookings, { onConflict: 'id' }, '予約');
 
   console.log('── 取り込み結果 ──');
+  console.log(`  部門: ${parsed.departmentName} (${deptSlug})`);
   console.log(`  校舎マスタ: ${parsed.schools.length}件`);
   parsed.perSchool.forEach((p) => {
     console.log(

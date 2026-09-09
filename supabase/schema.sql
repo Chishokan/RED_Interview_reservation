@@ -5,6 +5,21 @@
 -- 何度実行しても安全です(既にある場合は作り直しません)。
 -- ============================================================
 
+-- ---------- 部門マスタ ----------
+-- RED部門・中等部のように、保護者から見て別サービスとして扱う単位。
+-- URL(slug)・見た目の色・学年の選択肢を部門ごとに持つ。
+create table if not exists public.departments (
+  id           text primary key,
+  name         text not null,                       -- 画面に出す部門名
+  slug         text not null unique,                -- URL: /<slug> と /<slug>/admin
+  accent_color text not null default '#3182ce',     -- 画面の基調色(部門を見分けるため)
+  grades       text[] not null default '{}',        -- 予約フォームの学年の選択肢
+  sort_order   int  not null default 0,
+  active       boolean not null default true
+);
+
+comment on table public.departments is '部門マスタ。保護者・職員には部門ごとに別URLで見せる';
+
 -- ---------- 校舎マスタ ----------
 -- GAS版ではコード内の定数と「通知先」シートに分かれていたものを1つにまとめている。
 create table if not exists public.schools (
@@ -15,7 +30,23 @@ create table if not exists public.schools (
   active       boolean not null default true
 );
 
-comment on table public.schools is '校舎マスタ。notify_email は新規予約時の通知先';
+-- 既存のDBに後から部門を足せるようにしている(何度実行しても安全)
+alter table public.schools
+  add column if not exists department_id text references public.departments(id) on update cascade;
+alter table public.schools
+  add column if not exists line_works_channel_id text not null default '';
+
+-- 部門を導入する前からある校舎はすべてRED部門のものとして扱う。
+-- 参照先が無いと外部キー制約に引っかかるので、先に最小限の行を用意しておく
+-- (正式な名前・色・学年の設定は seed.sql が上書きする)。
+insert into public.departments (id, name, slug) values ('red', 'RED部門', 'red')
+on conflict (id) do nothing;
+
+update public.schools set department_id = 'red' where department_id is null;
+
+create index if not exists schools_department_idx on public.schools (department_id, sort_order);
+
+comment on table public.schools is '校舎マスタ。notify_email は新規予約時の通知先、line_works_channel_id はLINE WORKSの通知先トークルーム';
 
 -- ---------- 予約枠 ----------
 create table if not exists public.slots (
@@ -212,11 +243,13 @@ $$;
 -- ブラウザに配られる anon キーからは一切読み書きできないようにするため、
 -- 全テーブルでRLSを有効にしたうえで、ポリシーを1つも作らない。
 -- ============================================================
+alter table public.departments enable row level security;
 alter table public.schools  enable row level security;
 alter table public.slots    enable row level security;
 alter table public.bookings enable row level security;
 
 revoke all on public.slot_availability      from anon, authenticated;
+revoke all on public.departments            from anon, authenticated;
 revoke all on public.schools                from anon, authenticated;
 revoke all on public.slots                  from anon, authenticated;
 revoke all on public.bookings               from anon, authenticated;

@@ -3,8 +3,23 @@
 Google Apps Script (GAS) で動いていた面談予約システムを、**Vercel で動く Web アプリ**に移行したものです。
 データは **Supabase (PostgreSQL)** に保存します。
 
-- 保護者用画面: `https://<プロジェクト名>.vercel.app/`
-- 職員用の管理画面: `https://<プロジェクト名>.vercel.app/admin`
+## 部門ごとにURLが分かれています
+
+RED部門と中等部は、保護者・職員のどちらから見ても**別々のサービスとして表示されます**。
+データベースは1つですが、画面・URL・ログイン・通知先はすべて部門ごとに分かれています。
+
+| | RED部門 | 中等部 |
+|---|---|---|
+| 保護者用 | `https://<プロジェクト名>.vercel.app/red` | `https://<プロジェクト名>.vercel.app/chutobu` |
+| 管理画面 | `.../red/admin` | `.../chutobu/admin` |
+| 基調色 | 青 | 緑 |
+| 学年の選択肢 | 小1〜高3 | 小4〜中3 |
+| 新規予約の通知 | メール | LINE WORKS |
+
+`/`(ルート)は部門を選ぶ画面です。保護者の方には各部門の直接のURLをご案内してください。
+
+**部門をまたいだ操作はできません。** ある部門でログインしても別部門の管理APIは使えず、
+保護者が同じメールアドレスを使っていても、自部門の予約しか表示されません。
 
 ---
 
@@ -21,6 +36,7 @@ Google Apps Script (GAS) で動いていた面談予約システムを、**Verce
 | 管理画面のログイン | HTMLに直書き(画面上だけの鍵) | サーバー側で検証 + 署名付きCookie |
 | 二重予約の防止 | `LockService` | DBの行ロック(`create_booking` 関数) |
 | 通知先の管理 | 「通知先」シート | 管理画面の「システム設定」タブ |
+| 部門の分離 | スプレッドシートを分ける | 1つのDBで部門ごとにURL・ログインを分離 |
 | カレンダー出力 | Googleスプレッドシートを生成 | **Excelファイル(.xlsx)をダウンロード** |
 
 > ⚠️ **スプレッドシートは使わなくなります。**
@@ -41,9 +57,10 @@ Google Apps Script (GAS) で動いていた面談予約システムを、**Verce
 
 1. Supabaseの左メニュー **SQL Editor** を開く
 2. `supabase/schema.sql` の中身を貼り付けて実行する(テーブル・ビュー・関数・権限設定)
-3. 続けて `supabase/seed.sql` を貼り付けて実行する(7校舎の初期データ)
+3. 続けて `supabase/seed.sql` を貼り付けて実行する(部門と校舎の初期データ)
 
-どちらも**何度実行しても安全**です。
+どちらも**何度実行しても安全**です。すでに稼働中のデータベースに対して実行しても、
+既存の予約は保持したまま不足しているテーブルや列だけが追加されます。
 
 ### 2-3. 接続情報を控える
 
@@ -80,12 +97,16 @@ Supabaseの **Project Settings → API** で次の2つを確認します。
 |---|---|
 | `SUPABASE_URL` | SupabaseのProject URL |
 | `SUPABASE_SERVICE_ROLE_KEY` | service_role キー |
-| `ADMIN_ID` / `ADMIN_PASSWORD` | 管理画面のログインID・パスワード |
+| `ADMIN_ID_RED` / `ADMIN_PASSWORD_RED` 等 | 部門ごとの管理画面ログイン。部門別の値が無ければ `ADMIN_ID` / `ADMIN_PASSWORD` を使う |
 | `SESSION_SECRET` | ログインCookieの署名鍵。`openssl rand -base64 32` などで生成した長いランダムな文字列(24文字以上。どこかから取得する値ではなく、自分で作ります) |
 | `CRON_SECRET` | リマインドの定期実行を外部から勝手に叩かれないようにするトークン |
 
 メール送信は `RESEND_API_KEY`(推奨)か、`SMTP_HOST` などのSMTP設定のどちらかを入れてください。
 **どちらも未設定の場合、メールは送信されずログに記録されるだけ**になります(予約自体は正常に動きます)。
+
+中等部のLINE WORKS通知を使う場合は、`LINE_WORKS_*` の5つを設定したうえで、
+管理画面の「システム設定」から校舎ごとにトークルームIDを入力してください。
+未設定でも予約機能は正常に動き、LINE WORKSへの通知だけが送られない状態になります。
 
 > ⚠️ `ADMIN_ID` と `ADMIN_PASSWORD` を設定しないと管理画面にログインできません。
 > GAS版はIDとパスワードがHTMLに直書きされていましたが、Vercel版ではAPIが
@@ -107,15 +128,17 @@ Googleの認証情報は必要ありません。
 
 ```bash
 npm install
-npm run import:xlsx -- ./ダウンロードしたファイル.xlsx --dry-run   # まず件数だけ確認
-npm run import:xlsx -- ./ダウンロードしたファイル.xlsx             # 実際に取り込む
+# --dept でどの部門のデータかを指定します(red / chutobu)
+npm run import:xlsx -- ./RED部門.xlsx --dept red --dry-run   # まず件数だけ確認
+npm run import:xlsx -- ./RED部門.xlsx --dept red             # 実際に取り込む
+npm run import:xlsx -- ./中等部.xlsx  --dept chutobu
 ```
 
 **接続情報を用意せずに移行したい場合**は、`--sql` でSQLファイルを書き出し、
 SupabaseのSQL Editorに貼り付けて実行することもできます。
 
 ```bash
-npm run import:xlsx -- ./ダウンロードしたファイル.xlsx --sql ./migrate.sql
+npm run import:xlsx -- ./中等部.xlsx --dept chutobu --sql ./migrate.sql
 ```
 
 > ⚠️ 書き出したSQLには保護者・お子様の氏名やメールアドレスが含まれます。
@@ -123,9 +146,13 @@ npm run import:xlsx -- ./ダウンロードしたファイル.xlsx --sql ./migra
 
 取り込まれるもの:
 
-- 「通知先」シート → 校舎マスタの通知先アドレス
+- 「通知先」シート → 校舎マスタの通知先アドレス(RED部門のみ)
 - 「〇〇予約枠」シート → 予約枠(日付・時刻・ラベル・公開・定員)
 - 「〇〇予約データ」シート → 予約(予約IDをそのまま引き継ぐので、**何度実行しても重複しません**)
+
+> 中等部の「日野校」「大野校」は、RED部門の「RED日野教室」「RED大野教室」と
+> GAS版では同じ校舎ID(`hino` / `ono`)でした。データベースを共有するため、
+> 中等部側は `chutobu_hino` / `chutobu_ono` というIDに変えて取り込みます。
 
 日付・時刻・日時のセルは日本時間として解釈して取り込みます。
 予約IDが空の行、日時が読めない行、同じ日時の重複した枠は読み飛ばし、最後に件数を表示します。
@@ -160,7 +187,8 @@ supabase/
   seed.sql               校舎マスタの初期データ
 
 api/                     Vercel のサーバーレス関数(REST API)
-  schools.js               GET  校舎マスタ
+  departments.js           GET  部門マスタ(部門の選択画面用)
+  schools.js               GET  校舎マスタ(部門ごと)
   slots.js                 GET  予約可能な枠(保護者向け)
   bookings.js              GET/POST/PATCH/DELETE 予約(保護者向け)
   admin/
@@ -174,7 +202,8 @@ api/                     Vercel のサーバーレス関数(REST API)
 
 lib/                     共通ロジック
   db.js                    Supabaseクライアント
-  schools.js               校舎マスタ
+  schools.js               部門マスタと校舎マスタ
+  lineworks.js             LINE WORKSへの通知
   format.js                日付・時刻の正規化とタイムゾーン処理
   store.js                 予約・枠のドメインロジック
   mailer.js                メール送信(Resend / SMTP)
@@ -184,8 +213,9 @@ lib/                     共通ロジック
   http.js                  APIハンドラ共通のヘルパー
 
 public/                  画面(静的HTML)
-  index.html               保護者用
-  admin.html               職員用
+  index.html               部門の選択画面(/)
+  booking.html             保護者用(/<部門>)
+  admin.html               職員用(/<部門>/admin)
 
 scripts/
   import-from-xlsx.mjs   スプレッドシートからの移行
@@ -199,7 +229,7 @@ tests/                   テスト(npm test)
 
 ```bash
 npm install
-npm test                 # 108件のテストを実行(Supabaseへの接続は不要)
+npm test                 # 130件のテストを実行(Supabaseへの接続は不要)
 
 # ローカルで動かす場合
 npm i -g vercel
@@ -231,6 +261,13 @@ Vercel のサーバーは UTC で動きます。「今日」「明日」「過�
 全テーブルでRLSを有効にし、ポリシーを1つも作っていません。
 そのため `anon` キーからは何も見えず、`service_role` キーを持つサーバーだけが読み書きできます。
 管理画面のAPIはさらに、署名付きCookieによるログイン確認を通ります。
+
+### 部門の分離
+すべてのAPIが部門を必須の引数として受け取り、指定された校舎がその部門のものかを毎回確認します。
+校舎を引く関数は**部門の指定が無ければ何も返さない**(閉じる側に倒す)ので、
+渡し忘れが他部門のデータに触れる抜け道になりません。
+ログインCookieも部門ごとに分かれており、中に部門名が署名付きで入っているため、
+ある部門のCookieを別部門で使い回すことはできません。
 
 ### カレンダー出力
 GAS版はGoogleドライブにスプレッドシートを作っていましたが、Googleの認証情報を使わない構成に

@@ -1,6 +1,9 @@
 /** リマインドメールと新規予約通知のテスト(送信はResend APIをモックして捕捉する) */
 import assert from 'node:assert/strict';
-import { fakeClient, resetDb, seedSchools, seedBookings, dump } from './fake-supabase.js';
+import {
+  fakeClient, resetDb, seedDepartments, seedSchools, seedBookings, dump,
+} from './fake-supabase.js';
+import { DEPARTMENTS, SCHOOLS } from './fixtures.js';
 
 process.env.TIMEZONE = 'Asia/Tokyo';
 process.env.RESEND_API_KEY = 'test-key';
@@ -20,7 +23,7 @@ globalThis.fetch = async (url, opts) => {
 const { setDbForTesting } = await import('../lib/db.js');
 setDbForTesting(fakeClient);
 
-const { DEFAULT_SCHOOLS, clearSchoolCache } = await import('../lib/schools.js');
+const { clearSchoolCache } = await import('../lib/schools.js');
 const { todayStr, addDays } = await import('../lib/format.js');
 const { sendReminders, diagnoseReminders, notifyStaffNewBooking } = await import('../lib/notify.js');
 
@@ -45,7 +48,8 @@ function setup(bookings = [], notify = {}) {
   resetDb();
   clearSchoolCache();
   sentMails.length = 0;
-  seedSchools(DEFAULT_SCHOOLS.map((s) => ({ ...s, notify_email: notify[s.id] || '' })));
+  seedDepartments(DEPARTMENTS);
+  seedSchools(SCHOOLS.map((s) => ({ ...s, notify_email: notify[s.id] || '' })));
   seedBookings(bookings);
 }
 
@@ -113,6 +117,19 @@ await test('1件失敗しても他の送信は続く', async () => {
   assert.equal(dump('bookings').find((b) => b.email === 'boom@x.jp').reminder_sent_at, null);
 });
 
+await test('リマインドは全部門をまとめて送る', async () => {
+  setup([
+    booking('r1', { school_id: 'hirota', email: 'red@x.jp' }),
+    booking('c1', { school_id: 'chutobu_sasebo', email: 'chu@x.jp' }),
+  ]);
+  const res = await sendReminders();
+  assert.equal(res.sent, 2);
+  assert.deepEqual(sentMails.map((m) => m.to[0]).sort(), ['chu@x.jp', 'red@x.jp']);
+  // 中等部の予約には中等部の校舎名が入る
+  const chu = sentMails.find((m) => m.to[0] === 'chu@x.jp');
+  assert.match(chu.text, /佐世保駅前校/);
+});
+
 console.log('\n== リマインド診断 ==');
 await test('送信対象と除外理由を集計できる', async () => {
   setup([
@@ -121,7 +138,7 @@ await test('送信対象と除外理由を集計できる', async () => {
     booking('b3', { email: '' }),
     booking('b4', { email: 'd@x.jp', reminder_sent_at: '2026-01-01T01:00:00.000Z' }),
   ]);
-  const d = await diagnoseReminders();
+  const d = await diagnoseReminders('red');
   assert.equal(d.tomorrow, TOMORROW);
   assert.equal(d.totalTarget, 4);
   assert.equal(d.totalWouldSend, 1);
@@ -130,6 +147,19 @@ await test('送信対象と除外理由を集計できる', async () => {
     'キャンセル済', 'メール空欄', '送信済(2026-01-01 10:00)', '送信対象',
   ].sort());
   assert.equal(d.mailer, 'resend');
+});
+
+await test('診断は自部門の予約だけを対象にする', async () => {
+  setup([
+    booking('r1', { school_id: 'hirota', email: 'red@x.jp' }),
+    booking('c1', { school_id: 'chutobu_sasebo', email: 'chu@x.jp' }),
+  ]);
+  const red = await diagnoseReminders('red');
+  assert.equal(red.totalTarget, 1);
+  assert.deepEqual(red.perSchool.map((p) => p.school), ['RED広田教室']);
+  const chu = await diagnoseReminders('chutobu');
+  assert.equal(chu.totalTarget, 1);
+  assert.deepEqual(chu.perSchool.map((p) => p.school), ['佐世保駅前校']);
 });
 
 console.log('\n== 新規予約の担当者通知 ==');

@@ -1,5 +1,8 @@
 import assert from 'node:assert/strict';
-import { fakeClient, resetDb, seedSchools, seedSlots, seedBookings, dump } from './fake-supabase.js';
+import {
+  fakeClient, resetDb, seedDepartments, seedSchools, seedSlots, seedBookings, dump,
+} from './fake-supabase.js';
+import { DEPARTMENTS, SCHOOLS } from './fixtures.js';
 
 process.env.TIMEZONE = 'Asia/Tokyo';
 
@@ -7,7 +10,7 @@ const { setDbForTesting } = await import('../lib/db.js');
 setDbForTesting(fakeClient);
 
 const store = await import('../lib/store.js');
-const { DEFAULT_SCHOOLS, clearSchoolCache } = await import('../lib/schools.js');
+const { clearSchoolCache } = await import('../lib/schools.js');
 const { todayStr, addDays } = await import('../lib/format.js');
 
 const D1 = addDays(todayStr(), 3);   // 未来の日付
@@ -30,7 +33,8 @@ function booking(id, over = {}) {
 function setup(slots = [], bookings = []) {
   resetDb();
   clearSchoolCache();
-  seedSchools(DEFAULT_SCHOOLS);
+  seedDepartments(DEPARTMENTS);
+  seedSchools(SCHOOLS);
   seedSlots(slots.map((s) => ({ school_id: 'hirota', ...s })));
   seedBookings(bookings);
 }
@@ -44,7 +48,7 @@ async function test(name, fn) {
 console.log('\n== 予約枠の取得 ==');
 await test('公開中で空きのある枠が返る', async () => {
   setup([{ date: D1, time: '14:00' }, { date: D1, time: '14:30', capacity: 2 }]);
-  const slots = await store.getAvailableSlots('hirota');
+  const slots = await store.getAvailableSlots('hirota', 'red');
   assert.equal(slots.length, 2);
   assert.equal(slots[0].date, D1);
   assert.equal(slots[0].time, '14:00');
@@ -54,13 +58,13 @@ await test('公開中で空きのある枠が返る', async () => {
 
 await test('非公開の枠は返らない', async () => {
   setup([{ date: D1, time: '14:00', published: false }, { date: D1, time: '15:00' }]);
-  const slots = await store.getAvailableSlots('hirota');
+  const slots = await store.getAvailableSlots('hirota', 'red');
   assert.deepEqual(slots.map((s) => s.time), ['15:00']);
 });
 
 await test('過去の枠は返らない', async () => {
   setup([{ date: PAST, time: '14:00' }, { date: D1, time: '15:00' }]);
-  const slots = await store.getAvailableSlots('hirota');
+  const slots = await store.getAvailableSlots('hirota', 'red');
   assert.deepEqual(slots.map((s) => s.time), ['15:00']);
 });
 
@@ -69,26 +73,26 @@ await test('定員に達した枠は返らず、空きがあれば残数が出�
     [{ date: D1, time: '14:00' }, { date: D1, time: '15:00', capacity: 2 }],
     [booking('b1'), booking('b2', { time: '15:00' })]
   );
-  const slots = await store.getAvailableSlots('hirota');
+  const slots = await store.getAvailableSlots('hirota', 'red');
   assert.deepEqual(slots.map((s) => s.time), ['15:00']);
   assert.equal(slots[0].remaining, 1);
 });
 
 await test('キャンセル済みの予約は定員に数えない', async () => {
   setup([{ date: D1, time: '14:00' }], [booking('b1', { status: 'cancelled' })]);
-  assert.equal((await store.getAvailableSlots('hirota')).length, 1);
+  assert.equal((await store.getAvailableSlots('hirota', 'red')).length, 1);
 });
 
 await test("DBの時刻表記 '14:00:00' を 'HH:MM' に揃えて返す", async () => {
   setup([{ date: D1, time: '14:00:00' }]);
-  assert.equal((await store.getAvailableSlots('hirota'))[0].time, '14:00');
+  assert.equal((await store.getAvailableSlots('hirota', 'red'))[0].time, '14:00');
 });
 
 console.log('\n== 予約の作成 ==');
 await test('予約が作成され、DBに1件入る', async () => {
   setup([{ date: D1, time: '14:00' }]);
   const res = await store.createBooking({
-    schoolId: 'hirota', email: 'p@x.jp', date: D1, time: '14:00',
+    schoolId: 'hirota', dept: 'red', email: 'p@x.jp', date: D1, time: '14:00',
     childName: '花子', parentName: '太郎', grade: '小3', note: 'よろしく',
   });
   assert.equal(res.ok, true);
@@ -102,7 +106,7 @@ await test('予約が作成され、DBに1件入る', async () => {
 await test('定員が埋まっている枠は予約できない', async () => {
   setup([{ date: D1, time: '14:00' }], [booking('b1')]);
   const res = await store.createBooking({
-    schoolId: 'hirota', email: 'p@x.jp', date: D1, time: '14:00',
+    schoolId: 'hirota', dept: 'red', email: 'p@x.jp', date: D1, time: '14:00',
     childName: '花子', parentName: '太郎',
   });
   assert.equal(res.ok, false);
@@ -112,7 +116,7 @@ await test('定員が埋まっている枠は予約できない', async () => {
 await test('非公開の枠は予約できない', async () => {
   setup([{ date: D1, time: '14:00', published: false }]);
   const res = await store.createBooking({
-    schoolId: 'hirota', email: 'p@x.jp', date: D1, time: '14:00',
+    schoolId: 'hirota', dept: 'red', email: 'p@x.jp', date: D1, time: '14:00',
     childName: '花子', parentName: '太郎',
   });
   assert.equal(res.ok, false);
@@ -122,7 +126,7 @@ await test('非公開の枠は予約できない', async () => {
 await test('存在しない枠は予約できない', async () => {
   setup([{ date: D1, time: '14:00' }]);
   const res = await store.createBooking({
-    schoolId: 'hirota', email: 'p@x.jp', date: D1, time: '23:00',
+    schoolId: 'hirota', dept: 'red', email: 'p@x.jp', date: D1, time: '23:00',
     childName: '花子', parentName: '太郎',
   });
   assert.equal(res.ok, false);
@@ -131,7 +135,7 @@ await test('存在しない枠は予約できない', async () => {
 await test('過去の枠はサーバー側でも拒否する', async () => {
   setup([{ date: PAST, time: '14:00' }]);
   const res = await store.createBooking({
-    schoolId: 'hirota', email: 'p@x.jp', date: PAST, time: '14:00',
+    schoolId: 'hirota', dept: 'red', email: 'p@x.jp', date: PAST, time: '14:00',
     childName: '花子', parentName: '太郎',
   });
   assert.equal(res.ok, false);
@@ -140,7 +144,7 @@ await test('過去の枠はサーバー側でも拒否する', async () => {
 
 await test('必須項目が欠けていればエラー', async () => {
   setup([{ date: D1, time: '14:00' }]);
-  const res = await store.createBooking({ schoolId: 'hirota', date: D1, time: '14:00' });
+  const res = await store.createBooking({ schoolId: 'hirota', dept: 'red', date: D1, time: '14:00' });
   assert.equal(res.ok, false);
   assert.match(res.error, /パラメータが不足/);
 });
@@ -148,7 +152,7 @@ await test('必須項目が欠けていればエラー', async () => {
 await test('定員2の枠には2件まで予約できる', async () => {
   setup([{ date: D1, time: '14:00', capacity: 2 }]);
   const mk = (email, name) => store.createBooking({
-    schoolId: 'hirota', email, date: D1, time: '14:00', childName: name, parentName: 'P',
+    schoolId: 'hirota', dept: 'red', email, date: D1, time: '14:00', childName: name, parentName: 'P',
   });
   assert.equal((await mk('a@x.jp', 'A')).ok, true);
   assert.equal((await mk('b@x.jp', 'B')).ok, true);
@@ -160,7 +164,7 @@ await test('同時に来た予約でも定員を超えない', async () => {
   const results = await Promise.all(
     ['a', 'b', 'c', 'd'].map((n) =>
       store.createBooking({
-        schoolId: 'hirota', email: `${n}@x.jp`, date: D1, time: '14:00',
+        schoolId: 'hirota', dept: 'red', email: `${n}@x.jp`, date: D1, time: '14:00',
         childName: n, parentName: 'P',
       })
     )
@@ -172,7 +176,7 @@ await test('同時に来た予約でも定員を超えない', async () => {
 console.log('\n== 保護者の予約照会・変更 ==');
 await test('メールアドレスで自分の予約を引ける(大文字小文字を無視)', async () => {
   setup([], [booking('b1', { email: 'Parent@X.jp' })]);
-  const list = await store.getMyBookings('parent@x.jp');
+  const list = await store.getMyBookings('parent@x.jp', 'red');
   assert.equal(list.length, 1);
   assert.equal(list[0].schoolName, 'RED広田教室');
   assert.equal(list[0].childName, '子A');
@@ -180,20 +184,20 @@ await test('メールアドレスで自分の予約を引ける(大文字小文�
 
 await test('別人のメールでは引けない', async () => {
   setup([], [booking('b1')]);
-  assert.equal((await store.getMyBookings('other@x.jp')).length, 0);
+  assert.equal((await store.getMyBookings('other@x.jp', 'red')).length, 0);
 });
 
 await test('全校舎を横断して引ける', async () => {
   setup([], [booking('b1'), booking('b2', { school_id: 'nexta', time: '15:00' })]);
-  const list = await store.getMyBookings('a@x.jp');
+  const list = await store.getMyBookings('a@x.jp', 'red');
   assert.equal(list.length, 2);
   assert.deepEqual(list.map((b) => b.schoolName).sort(), ['RED広田教室', 'ネクスタ']);
 });
 
 await test('本人ならキャンセルできる / 他人はできない', async () => {
   setup([], [booking('b1')]);
-  assert.equal((await store.cancelBooking({ schoolId: 'hirota', email: 'nope@x.jp', id: 'b1' })).ok, false);
-  assert.equal((await store.cancelBooking({ schoolId: 'hirota', email: 'a@x.jp', id: 'b1' })).ok, true);
+  assert.equal((await store.cancelBooking({ schoolId: 'hirota', dept: 'red', email: 'nope@x.jp', id: 'b1' })).ok, false);
+  assert.equal((await store.cancelBooking({ schoolId: 'hirota', dept: 'red', email: 'a@x.jp', id: 'b1' })).ok, true);
   assert.equal(dump('bookings')[0].status, 'cancelled');
 });
 
@@ -203,7 +207,7 @@ await test('全枠が予約者情報つきで返る', async () => {
     [{ date: D1, time: '14:00', capacity: 2 }, { date: PAST, time: '10:00', label: 'ラベル', published: false }],
     [booking('b1')]
   );
-  const slots = await store.getAllSlots('hirota');
+  const slots = await store.getAllSlots('hirota', 'red');
   assert.equal(slots.length, 2);
   const past = slots.find((s) => s.date === PAST);
   assert.equal(past.isPast, true);
@@ -219,7 +223,7 @@ await test('全枠が予約者情報つきで返る', async () => {
 await test('枠を追加でき、重複はスキップされる', async () => {
   setup([{ date: D1, time: '14:00' }]);
   const res = await store.adminAddSlots({
-    schoolId: 'hirota',
+    schoolId: 'hirota', dept: 'red',
     slots: [{ date: D1, time: '14:00' }, { date: D1, time: '16:00' }, { date: D1, time: '16:30', capacity: 2 }],
   });
   assert.deepEqual([res.added, res.skipped], [2, 1]);
@@ -231,16 +235,16 @@ await test('枠を追加でき、重複はスキップされる', async () => {
 await test('公開/非公開と定員を切り替えられる', async () => {
   setup([{ date: D1, time: '14:00' }]);
   const id = dump('slots')[0].id;
-  assert.equal((await store.adminUpdateSlot({ schoolId: 'hirota', id, published: false })).ok, true);
+  assert.equal((await store.adminUpdateSlot({ schoolId: 'hirota', dept: 'red', id, published: false })).ok, true);
   assert.equal(dump('slots')[0].published, false);
-  assert.equal((await store.adminUpdateSlot({ schoolId: 'hirota', id, capacity: 2 })).ok, true);
+  assert.equal((await store.adminUpdateSlot({ schoolId: 'hirota', dept: 'red', id, capacity: 2 })).ok, true);
   assert.equal(dump('slots')[0].capacity, 2);
 });
 
 await test('予約数より少ない定員には変更できない', async () => {
   setup([{ date: D1, time: '14:00', capacity: 2 }], [booking('b1'), booking('b2')]);
   const id = dump('slots')[0].id;
-  const res = await store.adminUpdateSlot({ schoolId: 'hirota', id, capacity: 1 });
+  const res = await store.adminUpdateSlot({ schoolId: 'hirota', dept: 'red', id, capacity: 1 });
   assert.equal(res.ok, false);
   assert.match(res.error, /2件の予約/);
   assert.equal(dump('slots')[0].capacity, 2);
@@ -249,7 +253,7 @@ await test('予約数より少ない定員には変更できない', async () =>
 await test('他校舎の枠は更新できない', async () => {
   setup([{ date: D1, time: '14:00' }]);
   const id = dump('slots')[0].id;
-  const res = await store.adminUpdateSlot({ schoolId: 'nexta', id, published: false });
+  const res = await store.adminUpdateSlot({ schoolId: 'nexta', dept: 'red', id, published: false });
   assert.equal(res.ok, false);
   assert.equal(dump('slots')[0].published, true);
 });
@@ -260,7 +264,7 @@ await test('枠の一括削除は予約済みをスキップする', async () =>
     [booking('b1', { time: '15:00' })]
   );
   const ids = dump('slots').map((s) => s.id);
-  const res = await store.adminDeleteSlots({ schoolId: 'hirota', ids });
+  const res = await store.adminDeleteSlots({ schoolId: 'hirota', dept: 'red', ids });
   assert.deepEqual([res.deleted, res.skippedBooked], [2, 1]);
   const rows = dump('slots');
   assert.equal(rows.length, 1);
@@ -270,7 +274,7 @@ await test('枠の一括削除は予約済みをスキップする', async () =>
 await test('他校舎の枠は削除できない', async () => {
   setup([{ date: D1, time: '14:00' }]);
   const ids = dump('slots').map((s) => s.id);
-  const res = await store.adminDeleteSlots({ schoolId: 'nexta', ids });
+  const res = await store.adminDeleteSlots({ schoolId: 'nexta', dept: 'red', ids });
   assert.equal(res.deleted, 0);
   assert.equal(dump('slots').length, 1);
 });
@@ -278,7 +282,7 @@ await test('他校舎の枠は削除できない', async () => {
 await test('1件削除は、予約が入っていれば断る', async () => {
   setup([{ date: D1, time: '14:00' }], [booking('b1')]);
   const id = dump('slots')[0].id;
-  const res = await store.adminDeleteSlot({ schoolId: 'hirota', id });
+  const res = await store.adminDeleteSlot({ schoolId: 'hirota', dept: 'red', id });
   assert.equal(res.ok, false);
   assert.equal(dump('slots').length, 1);
 });
@@ -289,7 +293,7 @@ await test('定員の一括変更(予約数を下回る枠はスキップ)', asy
     [booking('b1', { time: '15:00' }), booking('b2', { time: '15:00' })]
   );
   const ids = dump('slots').map((s) => s.id);
-  const res = await store.adminBulkUpdateCapacity({ schoolId: 'hirota', ids, capacity: 1 });
+  const res = await store.adminBulkUpdateCapacity({ schoolId: 'hirota', dept: 'red', ids, capacity: 1 });
   assert.deepEqual([res.updated, res.skipped], [1, 1]);
   assert.equal(res.skipReasons.length, 1);
 });
@@ -297,9 +301,9 @@ await test('定員の一括変更(予約数を下回る枠はスキップ)', asy
 console.log('\n== 管理画面: 予約 ==');
 await test('予約の部分更新(担当メモ・面談記録)ができる', async () => {
   setup([], [booking('b1')]);
-  assert.equal((await store.adminUpdateBooking({ schoolId: 'hirota', id: 'b1', staffNote: '田中' })).ok, true);
+  assert.equal((await store.adminUpdateBooking({ schoolId: 'hirota', dept: 'red', id: 'b1', staffNote: '田中' })).ok, true);
   assert.equal((await store.adminUpdateBooking({
-    schoolId: 'hirota', id: 'b1', interviewNote: '進路の相談', interviewDone: true,
+    schoolId: 'hirota', dept: 'red', id: 'b1', interviewNote: '進路の相談', interviewDone: true,
   })).ok, true);
   const row = dump('bookings')[0];
   assert.equal(row.staff_note, '田中');
@@ -313,35 +317,126 @@ await test('予約の部分更新(担当メモ・面談記録)ができる', asy
 
 await test('日時変更は、他の予約と衝突するとエラー', async () => {
   setup([], [booking('b1'), booking('b2', { time: '15:00' })]);
-  const res = await store.adminUpdateBooking({ schoolId: 'hirota', id: 'b1', date: D1, time: '15:00' });
+  const res = await store.adminUpdateBooking({ schoolId: 'hirota', dept: 'red', id: 'b1', date: D1, time: '15:00' });
   assert.equal(res.ok, false);
-  const ok = await store.adminUpdateBooking({ schoolId: 'hirota', id: 'b1', date: D1, time: '16:00' });
+  const ok = await store.adminUpdateBooking({ schoolId: 'hirota', dept: 'red', id: 'b1', date: D1, time: '16:00' });
   assert.equal(ok.ok, true);
   assert.equal(dump('bookings').find((b) => b.id === 'b1').time, '16:00');
 });
 
 await test('キャンセル済みの予約がある枠へは移動できる', async () => {
   setup([], [booking('b1'), booking('b2', { time: '15:00', status: 'cancelled' })]);
-  const res = await store.adminUpdateBooking({ schoolId: 'hirota', id: 'b1', date: D1, time: '15:00' });
+  const res = await store.adminUpdateBooking({ schoolId: 'hirota', dept: 'red', id: 'b1', date: D1, time: '15:00' });
   assert.equal(res.ok, true);
 });
 
 await test('職員は予約をキャンセルできる', async () => {
   setup([], [booking('b1')]);
-  assert.equal((await store.adminCancelBooking({ schoolId: 'hirota', id: 'b1' })).ok, true);
+  assert.equal((await store.adminCancelBooking({ schoolId: 'hirota', dept: 'red', id: 'b1' })).ok, true);
   assert.equal(dump('bookings')[0].status, 'cancelled');
 });
 
 await test('他校舎からは予約を操作できない', async () => {
   setup([], [booking('b1')]);
-  assert.equal((await store.adminCancelBooking({ schoolId: 'nexta', id: 'b1' })).ok, false);
+  assert.equal((await store.adminCancelBooking({ schoolId: 'nexta', dept: 'red', id: 'b1' })).ok, false);
   assert.equal(dump('bookings')[0].status, 'confirmed');
 });
 
 await test('存在しない校舎はエラーになる', async () => {
   setup();
-  assert.equal((await store.adminCancelBooking({ schoolId: 'nope', id: 'b1' })).ok, false);
-  assert.deepEqual(await store.getAllSlots('nope'), []);
+  assert.equal((await store.adminCancelBooking({ schoolId: 'nope', dept: 'red', id: 'b1' })).ok, false);
+  assert.deepEqual(await store.getAllSlots('nope', 'red'), []);
+});
+
+console.log('\n== 部門の分離 ==');
+// RED部門の「RED日野教室(hino)」と中等部の「日野校(chutobu_hino)」のように、
+// 部門をまたいで似た校舎があるため、取り違えが起きないことを確かめる。
+
+function setupBothDepartments() {
+  resetDb();
+  clearSchoolCache();
+  seedDepartments(DEPARTMENTS);
+  seedSchools(SCHOOLS);
+  seedSlots([
+    { school_id: 'hino', date: D1, time: '14:00' },
+    { school_id: 'chutobu_hino', date: D1, time: '14:00' },
+  ]);
+  seedBookings([
+    booking('r1', { school_id: 'hino', child_name: 'RED生徒', email: 'same@x.jp' }),
+    booking('c1', { school_id: 'chutobu_hino', child_name: '中等部生徒', email: 'same@x.jp' }),
+  ]);
+}
+
+await test('同じ名前でも、部門が違えば別の校舎として扱われる', async () => {
+  setupBothDepartments();
+  // RED部門から見た hino は「RED日野教室」
+  const red = await store.getAllBookings('hino', 'red');
+  assert.equal(red.length, 1);
+  assert.equal(red[0].schoolName, 'RED日野教室');
+  // 中等部から見た chutobu_hino は「日野校」
+  const chu = await store.getAllBookings('chutobu_hino', 'chutobu');
+  assert.equal(chu.length, 1);
+  assert.equal(chu[0].schoolName, '日野校');
+});
+
+await test('他部門の校舎IDを指定しても何も返らない', async () => {
+  setupBothDepartments();
+  assert.deepEqual(await store.getAllBookings('chutobu_hino', 'red'), []);
+  assert.deepEqual(await store.getAllSlots('chutobu_hino', 'red'), []);
+  assert.deepEqual(await store.getAvailableSlots('hino', 'chutobu'), []);
+});
+
+await test('同じメールアドレスでも、自部門の予約しか見えない', async () => {
+  setupBothDepartments();
+  const red = await store.getMyBookings('same@x.jp', 'red');
+  assert.deepEqual(red.map((b) => b.childName), ['RED生徒']);
+  const chu = await store.getMyBookings('same@x.jp', 'chutobu');
+  assert.deepEqual(chu.map((b) => b.childName), ['中等部生徒']);
+});
+
+await test('他部門の校舎には予約できない', async () => {
+  setupBothDepartments();
+  const res = await store.createBooking({
+    schoolId: 'chutobu_hino', dept: 'red', email: 'p@x.jp',
+    date: D1, time: '15:00', childName: 'A', parentName: 'P',
+  });
+  assert.equal(res.ok, false);
+  assert.match(res.error, /校舎が見つかりません/);
+});
+
+await test('他部門の予約は職員でも操作できない', async () => {
+  setupBothDepartments();
+  // RED部門の職員が中等部の予約をキャンセルしようとしても通らない
+  assert.equal(
+    (await store.adminCancelBooking({ schoolId: 'chutobu_hino', dept: 'red', id: 'c1' })).ok,
+    false
+  );
+  assert.equal(dump('bookings').find((b) => b.id === 'c1').status, 'confirmed');
+  // 自部門なら通る
+  assert.equal(
+    (await store.adminCancelBooking({ schoolId: 'chutobu_hino', dept: 'chutobu', id: 'c1' })).ok,
+    true
+  );
+});
+
+await test('他部門の枠は追加も削除もできない', async () => {
+  setupBothDepartments();
+  const chutobuSlotId = dump('slots').find((s) => s.school_id === 'chutobu_hino').id;
+  const add = await store.adminAddSlots({
+    schoolId: 'chutobu_hino', dept: 'red', slots: [{ date: D1, time: '18:00' }],
+  });
+  assert.equal(add.ok, false);
+  const del = await store.adminDeleteSlots({
+    schoolId: 'chutobu_hino', dept: 'red', ids: [chutobuSlotId],
+  });
+  assert.equal(del.ok, false);
+  assert.equal(dump('slots').length, 2);
+});
+
+await test('部門を指定しないと校舎は見つからない', async () => {
+  setupBothDepartments();
+  assert.deepEqual(await store.getAllBookings('hino', undefined), []);
+  assert.deepEqual(await store.getAllBookings('hino', 'nonexistent'), []);
 });
 
 console.log(`\n${passed} 件のテストが通りました。`);

@@ -1,20 +1,22 @@
 /**
- * POST /api/admin/export-calendar (要ログイン)
+ * POST /api/admin/export-calendar (要ログイン・部門ごと)
  * 指定期間の予約を月カレンダー形式のExcelファイルにして返す。
- *
- * 成功時は .xlsx のバイナリを返し、失敗時はJSONでエラーを返す。
- * 件数はレスポンスヘッダー X-Booking-Count で伝える。
  */
 import { exportCalendar } from '../../lib/calendar-export.js';
 import { requireAdmin } from '../../lib/auth.js';
-import { readJsonBody, withErrorHandling, methodNotAllowed, noStore } from '../../lib/http.js';
+import {
+  readJsonBody, withErrorHandling, methodNotAllowed, noStore, resolveDepartment,
+} from '../../lib/http.js';
 
 export default withErrorHandling(async (req, res) => {
   noStore(res);
-  if (!requireAdmin(req, res)) return;
   if (req.method !== 'POST') return methodNotAllowed(res, ['POST']);
+  const body = await readJsonBody(req);
+  const dept = await resolveDepartment(req, res, body);
+  if (!dept) return;
+  if (!requireAdmin(req, res, dept.slug)) return;
 
-  const result = await exportCalendar(await readJsonBody(req));
+  const result = await exportCalendar({ ...body, dept: dept.slug });
   if (!result.ok) return res.status(200).json(result);
 
   // ファイル名に日本語が入るので RFC 5987 形式でも渡す

@@ -5,7 +5,7 @@
  */
 import assert from 'node:assert/strict';
 import ExcelJS from 'exceljs';
-import { parseWorkbook, buildSql } from '../scripts/import-from-xlsx.mjs';
+import { parseWorkbook, buildSql, DEPARTMENTS } from '../scripts/import-from-xlsx.mjs';
 
 process.env.TIMEZONE = 'Asia/Tokyo';
 
@@ -84,12 +84,13 @@ function test(name, fn) {
   catch (e) { console.error('  ✗ ' + name + '\n    ' + e.message); process.exitCode = 1; }
 }
 
-const parsed = parseWorkbook(buildWorkbook());
+const parsed = parseWorkbook(buildWorkbook(), 'red');
 
 console.log('\n== 既存データの移行 ==');
 
-test('校舎マスタに通知先が引き継がれる', () => {
+test('校舎マスタに部門と通知先が引き継がれる', () => {
   assert.equal(parsed.schools.length, 7);
+  assert.ok(parsed.schools.every((s) => s.department_id === 'red'));
   const hirota = parsed.schools.find((s) => s.id === 'hirota');
   assert.equal(hirota.name, 'RED広田教室');
   assert.equal(hirota.notify_email, 'staff@example.com');
@@ -176,6 +177,39 @@ console.log('\n== 移行用SQLの生成 ==');
 
 const sql = buildSql(parsed);
 
+test('校舎IDは部門をまたいで衝突しない', () => {
+  const ids = Object.values(DEPARTMENTS).flatMap((d) => d.schools.map((s) => s.id));
+  assert.equal(new Set(ids).size, ids.length, '校舎IDに重複があってはいけない');
+  // 中等部の日野校・大野校は、RED部門と同名でもIDが違う
+  const red = DEPARTMENTS.red.schools.map((s) => s.id);
+  const chu = DEPARTMENTS.chutobu.schools.map((s) => s.id);
+  assert.ok(red.includes('hino') && chu.includes('chutobu_hino'));
+  assert.ok(red.includes('ono') && chu.includes('chutobu_ono'));
+  assert.equal(red.filter((id) => chu.includes(id)).length, 0);
+});
+
+test('中等部のシートを部門つきで読み込める', () => {
+  const wb = new ExcelJS.Workbook();
+  const slots = wb.addWorksheet('佐世保駅前校予約枠');
+  slots.addRow(SLOT_HEADERS);
+  slots.addRow([d('2026-05-20'), t('14:00'), '', true, 1]);
+  const bookings = wb.addWorksheet('日野校予約データ');
+  bookings.addRow(BOOKING_HEADERS);
+  bookings.addRow([
+    'b_chu_1', d('2026-05-20'), t('16:00'), '中等部生徒', '保護者',
+    'chu@example.com', '中学3年', '', 'confirmed', dt('2026-05-01', '10:00'),
+    '', '', '', '', '',
+  ]);
+  const p = parseWorkbook(wb, 'chutobu');
+  assert.equal(p.departmentName, '中等部');
+  assert.equal(p.schools.length, 4);
+  assert.ok(p.schools.every((s) => s.department_id === 'chutobu'));
+  assert.equal(p.slots[0].school_id, 'chutobu_sasebo');
+  // 「日野校」は chutobu_hino に入る(RED日野教室の hino とは別物)
+  assert.equal(p.bookings[0].school_id, 'chutobu_hino');
+  assert.equal(p.bookings[0].child_name, '中等部生徒');
+});
+
 test('スキーマの3テーブルすべてにinsertが作られる', () => {
   assert.match(sql, /insert into public\.schools \(/);
   assert.match(sql, /insert into public\.slots \(/);
@@ -221,6 +255,11 @@ test('真偽値・NULL・数値がリテラルとして正しく出る', () => {
 
 test('日時はISO文字列として出力される', () => {
   assert.match(sql, /'2026-06-03T00:00:00\.000Z'/);  // 09:00 JST
+});
+
+test('校舎のinsertに部門が含まれる', () => {
+  assert.match(sql, /insert into public\.schools \(id, name, department_id, sort_order/);
+  assert.ok(sql.includes("'red'"), '部門IDが値として入っている');
 });
 
 test('件数が解析結果と一致する', () => {

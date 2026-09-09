@@ -5,6 +5,11 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>面談予約 管理画面</title>
 <style>
+  /* 部門ごとの基調色。読み込み時にJavaScriptが差し替える */
+  :root {
+    --accent: var(--accent);
+    --accent-dark: var(--accent-dark);
+  }
   * { box-sizing: border-box; margin: 0; padding: 0; }
   body {
     font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "Hiragino Sans", "Noto Sans JP", sans-serif;
@@ -12,7 +17,7 @@
   }
   .container { max-width: 1100px; margin: 0 auto; padding: 24px 16px; }
   header {
-    background: linear-gradient(135deg, #2c5282 0%, #3182ce 100%);
+    background: linear-gradient(135deg, var(--accent-dark) 0%, var(--accent) 100%);
     color: white; padding: 16px 0;
   }
   header .header-inner {
@@ -49,7 +54,7 @@
     cursor: pointer; border-bottom: 2px solid transparent; margin-bottom: -2px;
   }
   .tab:hover { color: #2d3748; }
-  .tab.active { color: #3182ce; border-bottom-color: #3182ce; }
+  .tab.active { color: var(--accent); border-bottom-color: var(--accent); }
   .panel {
     background: white; border-radius: 8px; padding: 24px;
     box-shadow: 0 1px 3px rgba(0,0,0,0.04); border: 1px solid #e2e8f0;
@@ -75,7 +80,7 @@
   .booking-card.past { opacity: 0.55; background: #f7fafc; }
   .booking-card.cancelled { opacity: 0.45; background: #fff5f5; }
   .booking-datetime { font-size: 15px; font-weight: 600; color: #1a202c; }
-  .booking-datetime .time { font-size: 18px; color: #3182ce; }
+  .booking-datetime .time { font-size: 18px; color: var(--accent); }
   .booking-body { font-size: 13px; line-height: 1.5; }
   .booking-body .name { font-size: 14px; font-weight: 600; color: #1a202c; }
   .booking-body .grade { color: #718096; margin-left: 6px; font-size: 12px; }
@@ -146,7 +151,7 @@
     left: 2px;
     width: calc(50% - 2px);
     height: calc(100% - 4px);
-    background: #3182ce;
+    background: var(--accent);
     border-radius: 999px;
     transition: transform 0.2s, background 0.2s;
     z-index: 1;
@@ -165,8 +170,8 @@
     padding: 8px 14px; border-radius: 6px; font-size: 13px;
     font-weight: 500; cursor: pointer; border: none;
   }
-  .btn-primary { background: #3182ce; color: white; }
-  .btn-primary:hover { background: #2c5282; }
+  .btn-primary { background: var(--accent); color: white; }
+  .btn-primary:hover { background: var(--accent-dark); }
   .btn-primary:disabled { background: #cbd5e0; cursor: not-allowed; }
   .btn-secondary { background: #edf2f7; color: #2d3748; }
   .btn-secondary:hover { background: #e2e8f0; }
@@ -261,7 +266,7 @@
   }
   .mode-btn:not(:last-child) { border-right: 1px solid #cbd5e0; }
   .mode-btn.active {
-    background: #3182ce;
+    background: var(--accent);
     color: white;
   }
   .mode-btn:hover:not(.active) { background: #ebf8ff; }
@@ -302,7 +307,7 @@
     min-width: 60px; width: 60px;
   }
   .select-grid th.weekend { background: #fed7d7; color: #742a2a; }
-  .select-grid th.weekday { background: #ebf8ff; color: #2c5282; }
+  .select-grid th.weekday { background: #ebf8ff; color: var(--accent-dark); }
   .select-grid td.time-cell {
     background: #f7fafc; font-weight: 600; color: #4a5568;
     position: sticky; left: 0; z-index: 1;
@@ -316,7 +321,7 @@
     background: #ebf8ff;
   }
   .select-grid td.cell.selected {
-    background: #3182ce; color: white;
+    background: var(--accent); color: white;
     font-weight: 700;
   }
   .select-grid td.cell.selected::before { content: '✓'; font-size: 13px; }
@@ -381,7 +386,7 @@
   .loading { text-align: center; padding: 32px; color: #718096; }
   .spinner {
     display: inline-block; width: 20px; height: 20px;
-    border: 2px solid #e2e8f0; border-top-color: #3182ce;
+    border: 2px solid #e2e8f0; border-top-color: var(--accent);
     border-radius: 50%; animation: spin 0.8s linear infinite;
     vertical-align: middle; margin-right: 8px;
   }
@@ -575,7 +580,7 @@
     max-height: 90vh; overflow-y: auto;
   }
   .modal-header {
-    padding: 14px 18px; background: #3182ce; color: white;
+    padding: 14px 18px; background: var(--accent); color: white;
     border-radius: 10px 10px 0 0;
     display: flex; justify-content: space-between; align-items: center;
     position: sticky; top: 0; z-index: 2;
@@ -668,8 +673,13 @@
   .maint-card h4 { font-size: 14px; font-weight: 600; color: #2d3748; }
   .maint-card p { font-size: 12px; color: #718096; line-height: 1.6; flex: 1; }
   .maint-card .btn { align-self: flex-start; }
+  .notify-head {
+    display: grid; grid-template-columns: 160px 1fr 1fr;
+    gap: 10px; padding: 4px 0;
+    font-size: 11px; font-weight: 600; color: #718096;
+  }
   .notify-row {
-    display: grid; grid-template-columns: 200px 1fr;
+    display: grid; grid-template-columns: 160px 1fr 1fr;
     gap: 10px; align-items: center;
     padding: 6px 0; border-bottom: 1px solid #edf2f7;
   }
@@ -682,11 +692,12 @@
     font-size: 13px; font-family: inherit;
   }
   .notify-row input:focus {
-    outline: none; border-color: #3182ce;
+    outline: none; border-color: var(--accent);
     box-shadow: 0 0 0 2px rgba(49,130,206,0.12);
   }
   @media (max-width: 640px) {
-    .notify-row { grid-template-columns: 1fr; gap: 4px; }
+    .notify-head { display: none; }
+    .notify-row { grid-template-columns: 1fr; gap: 4px; padding: 10px 0; }
   }
   .maint-output {
     background: #1a202c; color: #e2e8f0;
@@ -699,7 +710,7 @@
   /* ログイン画面 */
   .login-overlay {
     position: fixed; top: 0; left: 0; right: 0; bottom: 0;
-    background: linear-gradient(135deg, #2c5282 0%, #3182ce 100%);
+    background: linear-gradient(135deg, var(--accent-dark) 0%, var(--accent) 100%);
     display: flex; align-items: center; justify-content: center;
     z-index: 9999; padding: 20px;
   }
@@ -727,16 +738,16 @@
     font-size: 14px; font-family: inherit;
   }
   .login-box input:focus {
-    outline: none; border-color: #3182ce;
+    outline: none; border-color: var(--accent);
     box-shadow: 0 0 0 3px rgba(49,130,206,0.15);
   }
   .login-box .login-btn {
     width: 100%; padding: 12px; margin-top: 4px;
-    background: #3182ce; color: white; border: none;
+    background: var(--accent); color: white; border: none;
     border-radius: 6px; font-size: 14px; font-weight: 600;
     cursor: pointer;
   }
-  .login-box .login-btn:hover { background: #2c5282; }
+  .login-box .login-btn:hover { background: var(--accent-dark); }
   .login-box .login-btn:disabled { background: #cbd5e0; cursor: not-allowed; }
   .login-box .login-error {
     background: #fed7d7; color: #742a2a;
@@ -764,7 +775,7 @@
   <div class="login-box">
     <div class="login-icon">🔒</div>
     <h2>職員ログイン</h2>
-    <div class="login-sub">面談予約システム 管理画面</div>
+    <div class="login-sub" id="loginSub">面談予約システム 管理画面</div>
     <div class="login-error" id="loginError">IDまたはパスワードが正しくありません</div>
     <div class="form-group">
       <label for="loginId">ID</label>
@@ -780,8 +791,8 @@
 
 <header>
   <div class="header-inner">
-    <h1>⚙️ 面談予約 管理画面</h1>
-    <span class="badge">職員用</span>
+    <h1 id="pageTitle">⚙️ 面談予約 管理画面</h1>
+    <span class="badge" id="deptBadge">職員用</span>
     <button class="logout-btn" id="logoutBtn">ログアウト</button>
   </div>
 </header>
@@ -859,7 +870,7 @@
         <div id="modeHintClick" style="font-size:12px;color:#553c9a;background:#faf5ff;border:1px dashed #d6bcfa;border-radius:4px;padding:6px 10px;margin-bottom:8px;">
           💡 <strong>クリック選択</strong>:追加したい枠のセルをクリックして選択します。もう一度クリックで解除できます。
         </div>
-        <div id="modeHintRange" style="display:none;font-size:12px;color:#2c5282;background:#ebf8ff;border:1px dashed #90cdf4;border-radius:4px;padding:6px 10px;margin-bottom:8px;">
+        <div id="modeHintRange" style="display:none;font-size:12px;color:var(--accent-dark);background:#ebf8ff;border:1px dashed #90cdf4;border-radius:4px;padding:6px 10px;margin-bottom:8px;">
           💡 <strong>範囲選択</strong>:始点のセルを1回クリック → 終点のセルをもう1回クリックすると、その間の長方形(複数日×複数時間)がまとめて選択されます。<br>
           <strong>解除したい時</strong>:すでに選択済み(青)のセルを始点にすると、その範囲をまとめて解除できます(始点が灰色表示になります)。
         </div>
@@ -869,7 +880,7 @@
         </div>
         <div class="legend">
           <span class="legend-item"><span class="legend-box" style="background:white;"></span>未選択</span>
-          <span class="legend-item"><span class="legend-box" style="background:#3182ce;"></span>選択中(追加対象)</span>
+          <span class="legend-item"><span class="legend-box" style="background:var(--accent);"></span>選択中(追加対象)</span>
           <span class="legend-item"><span class="legend-box" style="background:#e24b4a;"></span>選択中(削除対象)</span>
           <span class="legend-item"><span class="legend-box" style="background:#fefcbf;"></span>登録済</span>
           <span class="legend-item"><span class="legend-box" style="background:#edf2f7;"></span>過去</span>
@@ -926,10 +937,12 @@
       新規予約の通知先の設定と、メンテナンス用の操作をここから行えます。
       いずれの操作も既存の予約データを消すことはありません。
     </p>
-    <h3 class="section-title">📧 新規予約の通知先</h3>
+    <h3 class="section-title">📢 新規予約の通知先</h3>
     <p style="font-size:12px;color:#718096;margin-bottom:10px;">
-      新しい予約が入ったときに通知メールを送るアドレスです。空欄の校舎には通知されません。
-      カンマ区切りで複数のアドレスを指定できます。
+      新しい予約が入ったときの通知先です。両方を設定すると両方に届き、
+      どちらも空欄の校舎には通知されません。<br>
+      メールはカンマ区切りで複数のアドレスを指定できます。
+      LINE WORKSはトークルームIDを入れてください(<span id="lwState">―</span>)。
     </p>
     <div id="notifyEditor">
       <div class="loading"><span class="spinner"></span>読み込み中…</div>
@@ -948,7 +961,7 @@
       </div>
       <div class="maint-card">
         <h4>▶ 新規予約通知をテスト送信</h4>
-        <p>「通知先」シートに登録された各校舎のアドレスへ、テストメールを送信します。
+        <p>上で設定した各校舎の通知先(メール / LINE WORKS)へテスト送信します。
           設定が正しいかの確認に使います。</p>
         <button class="btn btn-secondary" data-maint="testNotify">実行する</button>
       </div>
@@ -961,7 +974,8 @@
       <div class="maint-card">
         <h4>✉️ リマインドを手動送信</h4>
         <p>翌日の面談予約にリマインドメールを送ります。通常は毎日自動で送信されるため、
-          テストや復旧のときだけ使ってください(送信済みの予約には再送されません)。</p>
+          テストや復旧のときだけ使ってください(送信済みの予約には再送されません)。<br>
+          <strong>この操作は全部門が対象です。</strong></p>
         <button class="btn btn-secondary" data-maint="sendReminders">実行する</button>
       </div>
     </div>
@@ -996,7 +1010,7 @@
         💡 ダウンロードしたファイルは Excel でも Googleスプレッドシート でも開けます。
       </div>
       <div id="exportError" style="display:none; color:#c53030; background:#fcebeb; border-radius:4px; padding:8px 10px; margin-top:10px; font-size:13px;"></div>
-      <div id="exportProgress" style="display:none; margin-top:14px; text-align:center; color:#2c5282;">
+      <div id="exportProgress" style="display:none; margin-top:14px; text-align:center; color:var(--accent-dark);">
         <span class="spinner"></span> 出力中です。少々お待ちください…
       </div>
       <div id="exportSuccess" style="display:none; margin-top:14px; padding:12px; background:#e6fffa; border:1px solid #38b2ac; border-radius:6px;">
@@ -1080,7 +1094,10 @@
 <div class="toast" id="toast"></div>
 
 <script>
-const LAST_SCHOOL_KEY = 'admin_last_school';
+// URLの先頭の区切り(/red/admin、/chutobu/admin など)がその部門を表す
+const DEPT = (location.pathname.split('/').filter(Boolean)[0] || '').toLowerCase();
+// 保存する値は部門ごとに分ける(別部門の校舎が復元されないようにするため)
+const LAST_SCHOOL_KEY = 'admin_last_school_' + DEPT;
 
 // 標準の時間帯設定
 const WEEKDAY_TIMES = (() => {
@@ -1110,6 +1127,7 @@ function formatMinutes(min) {
 }
 
 let state = {
+  department: null,
   schools: [],
   currentSchoolId: '',
   bookings: [],
@@ -1132,30 +1150,32 @@ async function apiCall(funcName, payload) {
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(body || {}),
   });
-  const q = (path, params) => path + '?' + new URLSearchParams(params).toString();
+  // どのAPIにも部門を必ず付ける
+  const q = (path, params) => path + '?' + new URLSearchParams({ dept: DEPT, ...params }).toString();
+  const withDept = (body) => ({ ...body, dept: DEPT });
   let res;
   if (funcName === 'getSchools') {
-    res = await fetch('/api/schools');
+    res = await fetch(q('/api/schools', {}));
   } else if (funcName === 'getAllSlots') {
     res = await fetch(q('/api/admin/slots', { schoolId: payload.schoolId }));
   } else if (funcName === 'getAllBookings') {
     res = await fetch(q('/api/admin/bookings', { schoolId: payload.schoolId }));
   } else if (funcName === 'addSlots') {
-    res = await fetch('/api/admin/slots', json('POST', payload));
+    res = await fetch('/api/admin/slots', json('POST', withDept(payload)));
   } else if (funcName === 'updateSlot') {
-    res = await fetch('/api/admin/slots', json('PATCH', payload));
+    res = await fetch('/api/admin/slots', json('PATCH', withDept(payload)));
   } else if (funcName === 'bulkCapacity') {
-    res = await fetch('/api/admin/slots', json('PATCH', { ...payload, action: 'bulkCapacity' }));
+    res = await fetch('/api/admin/slots', json('PATCH', withDept({ ...payload, action: 'bulkCapacity' })));
   } else if (funcName === 'deleteSlot' || funcName === 'deleteSlots') {
-    res = await fetch('/api/admin/slots', json('DELETE', payload));
+    res = await fetch('/api/admin/slots', json('DELETE', withDept(payload)));
   } else if (funcName === 'cancelBooking') {
-    res = await fetch('/api/admin/bookings', json('DELETE', payload));
+    res = await fetch('/api/admin/bookings', json('DELETE', withDept(payload)));
   } else if (funcName === 'updateBooking') {
-    res = await fetch('/api/admin/bookings', json('PATCH', payload));
+    res = await fetch('/api/admin/bookings', json('PATCH', withDept(payload)));
   } else if (funcName === 'getSettings') {
-    res = await fetch('/api/admin/setup');
+    res = await fetch(q('/api/admin/setup', {}));
   } else if (funcName === 'setup') {
-    res = await fetch('/api/admin/setup', json('POST', payload));
+    res = await fetch('/api/admin/setup', json('POST', withDept(payload)));
   } else {
     throw new Error('不明な操作です: ' + funcName);
   }
@@ -1175,10 +1195,36 @@ async function apiCall(funcName, payload) {
   return data;
 }
 
+/** 基調色から、少し暗い色(ボタンのホバーなど)を作る */
+function darken(hex, ratio) {
+  const m = String(hex).match(/^#?([0-9a-f]{6})$/i);
+  if (!m) return hex;
+  const n = parseInt(m[1], 16);
+  const ch = [(n >> 16) & 255, (n >> 8) & 255, n & 255]
+    .map(v => Math.max(0, Math.round(v * (1 - ratio))));
+  return '#' + ch.map(v => v.toString(16).padStart(2, '0')).join('');
+}
+
+/** 部門に合わせて、色とタイトルを整える(別部門と取り違えないように) */
+function applyDepartment(dept) {
+  if (!dept) return;
+  state.department = dept;
+  if (dept.accentColor) {
+    document.documentElement.style.setProperty('--accent', dept.accentColor);
+    document.documentElement.style.setProperty('--accent-dark', darken(dept.accentColor, 0.25));
+  }
+  document.title = dept.name + ' 面談予約 管理画面';
+  document.getElementById('pageTitle').textContent = '⚙️ ' + dept.name + ' 面談予約 管理画面';
+  document.getElementById('deptBadge').textContent = dept.name + ' 職員用';
+  const sub = document.getElementById('loginSub');
+  if (sub) sub.textContent = dept.name + ' 面談予約システム 管理画面';
+}
+
 async function loadSchools() {
   try {
     const data = await apiCall('getSchools');
     if (!data.ok) throw new Error(data.error);
+    applyDepartment(data.department);
     state.schools = data.schools || [];
     const sel = document.getElementById('schoolSelect');
     sel.innerHTML = '<option value="">校舎を選択…</option>' +
@@ -2134,14 +2180,25 @@ async function loadNotifySettings() {
   try {
     const data = await apiCall('getSettings');
     if (!data.ok) throw new Error(data.error);
-    box.innerHTML = (data.schools || []).map(s =>
-      '<div class="notify-row">' +
-        '<div class="notify-school">' + escapeHtml(s.name) + '</div>' +
-        '<input type="text" data-school="' + escapeHtml(s.id) + '" ' +
-          'placeholder="例: staff@example.com, sub@example.com" ' +
-          'value="' + escapeHtml(s.notifyEmail || '') + '">' +
-      '</div>'
-    ).join('');
+    const lwState = document.getElementById('lwState');
+    if (lwState) {
+      lwState.textContent = data.lineWorksConfigured
+        ? 'LINE WORKS連携は設定済みです'
+        : 'LINE WORKSの環境変数が未設定のため送信されません';
+    }
+    box.innerHTML =
+      '<div class="notify-head"><div>校舎</div><div>メール</div><div>LINE WORKS トークルームID</div></div>' +
+      (data.schools || []).map(s =>
+        '<div class="notify-row">' +
+          '<div class="notify-school">' + escapeHtml(s.name) + '</div>' +
+          '<input type="text" data-school="' + escapeHtml(s.id) + '" data-field="email" ' +
+            'placeholder="例: staff@example.com" ' +
+            'value="' + escapeHtml(s.notifyEmail || '') + '">' +
+          '<input type="text" data-school="' + escapeHtml(s.id) + '" data-field="lw" ' +
+            'placeholder="トークルームID" ' +
+            'value="' + escapeHtml(s.lineWorksChannelId || '') + '">' +
+        '</div>'
+      ).join('');
     if (!data.schools || data.schools.length === 0) {
       box.innerHTML = '<div class="empty-msg">校舎が登録されていません。' +
         'supabase/seed.sql を実行してください。</div>';
@@ -2154,11 +2211,19 @@ async function loadNotifySettings() {
 async function handleSaveNotify() {
   const inputs = document.querySelectorAll('#notifyEditor input[data-school]');
   if (!inputs.length) return;
-  const emails = Array.from(inputs).map(i => ({ schoolId: i.dataset.school, email: i.value.trim() }));
+  // 校舎ごとに、メールとLINE WORKSの入力をまとめる
+  const bySchool = new Map();
+  inputs.forEach(i => {
+    const entry = bySchool.get(i.dataset.school) || { schoolId: i.dataset.school };
+    if (i.dataset.field === 'email') entry.email = i.value.trim();
+    else entry.lineWorksChannelId = i.value.trim();
+    bySchool.set(i.dataset.school, entry);
+  });
+  const notify = Array.from(bySchool.values());
   const btn = document.getElementById('saveNotifyBtn');
   btn.disabled = true;
   try {
-    const res = await apiCall('setup', { action: 'saveNotifyEmails', emails });
+    const res = await apiCall('setup', { action: 'saveNotify', notify });
     if (!res.ok) throw new Error(res.error);
     showToast(res.message || '通知先を保存しました', 'success');
   } catch (err) {
@@ -2219,8 +2284,9 @@ let initialized = false;
 async function init() {
   // サーバーにログイン状態を問い合わせる
   try {
-    const res = await fetch('/api/admin/auth');
+    const res = await fetch('/api/admin/auth?dept=' + encodeURIComponent(DEPT));
     const data = await res.json();
+    if (data.department) applyDepartment(data.department);
     if (data.loggedIn) {
       hideLoginScreen();
       doInit();
@@ -2255,7 +2321,7 @@ async function handleLogin() {
     const res = await fetch('/api/admin/auth', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ action: 'login', id, password: pw }),
+      body: JSON.stringify({ dept: DEPT, action: 'login', id, password: pw }),
     });
     const data = await res.json();
     if (data.ok && data.loggedIn) {
@@ -2284,7 +2350,7 @@ async function handleLogout() {
     await fetch('/api/admin/auth', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ action: 'logout' }),
+      body: JSON.stringify({ dept: DEPT, action: 'logout' }),
     });
   } catch (e) {}
   location.reload();
@@ -2441,6 +2507,7 @@ async function handleExportRun() {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
+        dept: DEPT,
         schoolId: state.currentSchoolId,
         startDate: startDate,
         endDate: endDate,
