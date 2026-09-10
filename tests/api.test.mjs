@@ -278,6 +278,28 @@ await test('接続確認が件数を返す', async () => {
   assert.equal(data.activeBookings, 0);
 });
 
+await test('テスト送信は、送れなかった理由まで返す', async () => {
+  setup();
+  await call('/api/admin/setup', {
+    method: 'POST',
+    body: {
+      dept: 'red', action: 'saveNotify',
+      notify: [{ schoolId: 'hirota', email: 'staff@x.jp' }],
+    },
+  });
+  const { data } = await call('/api/admin/setup', {
+    method: 'POST', body: { dept: 'red', action: 'testNotify' },
+  });
+  assert.equal(data.sent, 0);
+  assert.equal(data.mailer, 'none');   // このテストでは送信手段を設定していない
+  // 宛先を入れた校舎は「未設定」ではなく、理由つきの失敗として並ぶ
+  const hirota = data.noRecipient.find((x) => x.startsWith('RED広田教室'));
+  assert.match(hirota, /送信できず/);
+  assert.match(hirota, /環境変数が未設定/);
+  // 宛先が空の校舎は、これまでどおり校舎名だけ
+  assert.ok(data.noRecipient.includes('RED京町教室'));
+});
+
 await test('不明な action は400を返す', async () => {
   const { status } = await call('/api/admin/setup', { method: 'POST', body: { dept: 'red', action: 'nope' } });
   assert.equal(status, 400);

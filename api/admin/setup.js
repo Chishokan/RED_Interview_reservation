@@ -40,6 +40,22 @@ async function saveNotify(dept, body) {
   return { ok: true, saved, message: `${saved}校舎の通知先を保存しました。` };
 }
 
+/**
+ * 送信できなかった理由を、職員が読んで分かる言葉にする。
+ * 「送信できず」だけだと、設定漏れなのか認証失敗なのか切り分けられないため。
+ */
+function describeFailure(result) {
+  const raw = [
+    ...(result.results || []).map((r) => r && r.reason).filter(Boolean),
+    result.reason,
+  ].filter(Boolean)[0];
+  if (!raw) return '原因不明';
+  if (raw === 'not-configured') return 'メール送信の環境変数が未設定(要再デプロイ)';
+  if (raw === 'timeout') return '送信先が応答せずタイムアウト';
+  if (raw === 'no-recipient') return '宛先が空';
+  return String(raw).replace(/\s+/g, ' ').slice(0, 200);
+}
+
 /** 各校舎の通知先設定が正しいか、テスト送信して確認する */
 async function testNotify(dept) {
   const schools = await listSchools(dept.slug, { includeInactive: true });
@@ -64,14 +80,15 @@ async function testNotify(dept) {
       note: 'これは通知先設定のテストです。',
     });
     if (result.sent) sent++;
-    else noRecipient.push(`${school.name}(送信できず)`);
+    else noRecipient.push(`${school.name}(送信できず: ${describeFailure(result)})`);
   }
   return {
     ok: true,
     sent,
+    mailer: mailerMode(),
     noRecipient,
     message:
-      `通知テストを送信しました。送信: ${sent}校舎` +
+      `通知テストを送信しました(メール送信方法: ${mailerMode()})。送信: ${sent}校舎` +
       (noRecipient.length ? ` / 未設定・失敗: ${noRecipient.join('、')}` : ''),
   };
 }
