@@ -12,7 +12,7 @@
 import { listSchools, updateSchoolNotify } from '../../lib/schools.js';
 import { getDb, unwrap } from '../../lib/db.js';
 import { notifyStaffNewBooking, sendReminders, diagnoseReminders } from '../../lib/notify.js';
-import { mailerMode } from '../../lib/mailer.js';
+import { mailerMode, mailQuota } from '../../lib/mailer.js';
 import { isLineWorksConfigured } from '../../lib/lineworks.js';
 import { todayStr, TIMEZONE } from '../../lib/format.js';
 import { requireAdmin } from '../../lib/auth.js';
@@ -112,6 +112,8 @@ async function status(dept) {
     department: dept.name,
     timezone: TIMEZONE,
     mailer: mailerMode(),
+    // GAS経由のときだけ、その日あと何通送れるかを出す(無料のGmailは100通/日)
+    mailQuotaRemaining: await mailQuota().catch((err) => `取得できません: ${err.message}`),
     lineWorks: isLineWorksConfigured() ? '設定済' : '未設定',
     schools: schools.length,
     slots: await countOf('slots'),

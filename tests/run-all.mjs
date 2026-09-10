@@ -12,6 +12,7 @@ const files = [
   'auth.test.mjs',
   'store.test.mjs',
   'reminders.test.mjs',
+  'mailer-gas.test.mjs',
   'api.test.mjs',
   'import.test.mjs',
 ];
