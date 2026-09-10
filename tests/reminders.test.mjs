@@ -205,4 +205,27 @@ await test('通知の送信に失敗しても例外を投げない(予約処理�
   assert.equal(res.sent, false);
 });
 
+await test('応答が返らないメールサーバーでも、待ち続けずに打ち切る', async () => {
+  setup([], { hirota: 'a@x.jp' });
+  const saved = globalThis.fetch;
+  // いつまでも解決しない送信を再現する
+  globalThis.fetch = () => new Promise(() => {});
+  process.env.NOTIFY_TIMEOUT_MS = '150';
+
+  const started = Date.now();
+  const res = await notifyStaffNewBooking({
+    schoolId: 'hirota', schoolName: 'RED広田教室', date: TOMORROW, time: '14:00',
+    childName: '花子', parentName: '太郎', email: 'p@x.jp',
+  });
+  const elapsed = Date.now() - started;
+
+  globalThis.fetch = saved;
+  delete process.env.NOTIFY_TIMEOUT_MS;
+
+  assert.equal(res.sent, false);
+  assert.equal(res.reason, 'timeout');
+  // 上限を大きく超えて待っていないこと(予約完了の応答を遅らせない)
+  assert.ok(elapsed < 1000, `打ち切りに ${elapsed}ms かかりました`);
+});
+
 console.log(`\n${passed} 件のテストが通りました。`);
