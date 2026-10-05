@@ -3,6 +3,7 @@
  * Vercelのサーバーレス関数と同じ形(req.query / res.status().json())を再現している。
  */
 import assert from 'node:assert/strict';
+import crypto from 'node:crypto';
 import http from 'node:http';
 import {
   fakeClient, resetDb, seedDepartments, seedSchools, seedSlots, seedBookings, dump,
@@ -15,6 +16,7 @@ process.env.ADMIN_PASSWORD = 'pw123';
 process.env.ADMIN_ID_CHUTOBU = 'chu-staff';
 process.env.ADMIN_PASSWORD_CHUTOBU = 'chu-pw123';
 process.env.SESSION_SECRET = 'test-secret-long-enough-for-signing';
+process.env.CHISHOKAN_SSO_SECRET = 'test-sso-secret-long-enough-for-signing';
 
 const { setDbForTesting } = await import('../lib/db.js');
 setDbForTesting(fakeClient);
@@ -28,6 +30,7 @@ const routes = {
   '/api/slots': (await import('../api/slots.js')).default,
   '/api/bookings': (await import('../api/bookings.js')).default,
   '/api/admin/auth': (await import('../api/admin/auth.js')).default,
+  '/api/admin/sso': (await import('../api/admin/sso.js')).default,
   '/api/admin/slots': (await import('../api/admin/slots.js')).default,
   '/api/admin/bookings': (await import('../api/admin/bookings.js')).default,
   '/api/admin/setup': (await import('../api/admin/setup.js')).default,
@@ -451,6 +454,54 @@ await test('保護者も同じメールで部門ごとに分かれて見える',
   assert.deepEqual(red.data.bookings.map((b) => b.childName), ['RED生徒']);
   const chu = await call('/api/bookings?dept=chutobu&email=same%40x.jp');
   assert.deepEqual(chu.data.bookings.map((b) => b.childName), ['中等部生徒']);
+});
+
+console.log('\n== 智翔館アプリからの自動ログイン ==');
+function ssoToken(payload, secret = process.env.CHISHOKAN_SSO_SECRET) {
+  const encoded = Buffer.from(JSON.stringify(payload)).toString('base64url');
+  const sig = crypto.createHmac('sha256', secret).update(encoded).digest('base64url');
+  return `${encoded}.${sig}`;
+}
+async function ssoCall(query) {
+  const res = await fetch(`${base}/api/admin/sso?${query}`, { redirect: 'manual' });
+  const setCookie = res.headers.get('set-cookie');
+  if (setCookie) cookies.set(setCookie.split('=')[0], setCookie.split(';')[0]);
+  return { status: res.status, location: res.headers.get('location'), setCookie };
+}
+
+await test('正しいトークンならその部門にログインした状態で管理画面へ移る', async () => {
+  setup();
+  cookies.clear();
+  const now = Math.floor(Date.now() / 1000);
+  const token = ssoToken({ aud: 'interview-admin', dept: 'chutobu', name: '池田貴光', campus: '小中等部', iat: now, exp: now + 60 });
+  const r = await ssoCall(`token=${encodeURIComponent(token)}`);
+  assert.equal(r.status, 302);
+  assert.equal(r.location, '/chutobu/admin');
+  assert.equal((await call('/api/admin/auth?dept=chutobu')).data.loggedIn, true);
+  // 別部門にはログインしていない
+  assert.equal((await call('/api/admin/auth?dept=red')).data.loggedIn, false);
+});
+
+await test('不正なトークンならログインさせず、ログイン画面へ戻す', async () => {
+  setup();
+  cookies.clear();
+  const now = Math.floor(Date.now() / 1000);
+  const token = ssoToken({ aud: 'interview-admin', dept: 'red', iat: now, exp: now + 60 }, 'wrong-secret-long-enough-for-signing');
+  const r = await ssoCall(`token=${encodeURIComponent(token)}&dept=red`);
+  assert.equal(r.status, 302);
+  assert.equal(r.location, '/red/admin?sso=failed');
+  assert.equal(r.setCookie, null);
+  assert.equal((await call('/api/admin/auth?dept=red')).data.loggedIn, false);
+});
+
+await test('存在しない部門のトークンは通らない', async () => {
+  setup();
+  cookies.clear();
+  const now = Math.floor(Date.now() / 1000);
+  const token = ssoToken({ aud: 'interview-admin', dept: 'nowhere', iat: now, exp: now + 60 });
+  const r = await ssoCall(`token=${encodeURIComponent(token)}`);
+  assert.equal(r.location, '/');
+  assert.equal(r.setCookie, null);
 });
 
 console.log('\n== Cron ==');
