@@ -3,7 +3,6 @@
  * Vercelのサーバーレス関数と同じ形(req.query / res.status().json())を再現している。
  */
 import assert from 'node:assert/strict';
-import crypto from 'node:crypto';
 import http from 'node:http';
 import {
   fakeClient, resetDb, seedDepartments, seedSchools, seedSlots, seedBookings, dump,
@@ -11,12 +10,6 @@ import {
 import { DEPARTMENTS, SCHOOLS } from './fixtures.js';
 
 process.env.TIMEZONE = 'Asia/Tokyo';
-process.env.ADMIN_ID = 'staff';
-process.env.ADMIN_PASSWORD = 'pw123';
-process.env.ADMIN_ID_CHUTOBU = 'chu-staff';
-process.env.ADMIN_PASSWORD_CHUTOBU = 'chu-pw123';
-process.env.SESSION_SECRET = 'test-secret-long-enough-for-signing';
-process.env.CHISHOKAN_SSO_SECRET = 'test-sso-secret-long-enough-for-signing';
 
 const { setDbForTesting } = await import('../lib/db.js');
 setDbForTesting(fakeClient);
@@ -29,8 +22,6 @@ const routes = {
   '/api/schools': (await import('../api/schools.js')).default,
   '/api/slots': (await import('../api/slots.js')).default,
   '/api/bookings': (await import('../api/bookings.js')).default,
-  '/api/admin/auth': (await import('../api/admin/auth.js')).default,
-  '/api/admin/sso': (await import('../api/admin/sso.js')).default,
   '/api/admin/slots': (await import('../api/admin/slots.js')).default,
   '/api/admin/bookings': (await import('../api/admin/bookings.js')).default,
   '/api/admin/setup': (await import('../api/admin/setup.js')).default,
@@ -55,28 +46,15 @@ const server = http.createServer(async (req, res) => {
 await new Promise((r) => server.listen(0, r));
 const base = `http://localhost:${server.address().port}`;
 
-// ブラウザと同じように、部門ごとのCookieをためて送る
-const cookies = new Map();
-function cookieHeader() {
-  return [...cookies.values()].join('; ');
-}
-async function call(path, { method = 'GET', body, headers = {}, withCookie = true, raw = false } = {}) {
+async function call(path, { method = 'GET', body, headers = {}, raw = false } = {}) {
   const res = await fetch(base + path, {
     method,
     headers: {
       ...(body ? { 'Content-Type': 'application/json' } : {}),
-      ...(withCookie && cookies.size ? { Cookie: cookieHeader() } : {}),
       ...headers,
     },
     body: body ? JSON.stringify(body) : undefined,
   });
-  const setCookie = res.headers.get('set-cookie');
-  if (setCookie) {
-    const pair = setCookie.split(';')[0];
-    const name = pair.split('=')[0];
-    if (/Max-Age=0/.test(setCookie)) cookies.delete(name);
-    else cookies.set(name, pair);
-  }
   if (raw) return { status: res.status, res, buffer: Buffer.from(await res.arrayBuffer()) };
   return { status: res.status, data: await res.json() };
 }
@@ -142,44 +120,20 @@ await test('未対応のメソッドは405を返す', async () => {
   assert.equal(status, 405);
 });
 
-console.log('\n== 管理APIの保護 ==');
-await test('未ログインでは管理APIが401を返す', async () => {
+console.log('\n== 管理API(ログインなし) ==');
+await test('ログインしていなくても管理APIを使える(ログインの仕組みは無い)', async () => {
+  setup();
   for (const path of [
     '/api/admin/slots?dept=red&schoolId=hirota',
     '/api/admin/bookings?dept=red&schoolId=hirota',
     '/api/admin/setup?dept=red',
   ]) {
-    const { status, data } = await call(path, { withCookie: false });
-    assert.equal(status, 401, path);
-    assert.equal(data.needLogin, true);
+    const { status, data } = await call(path);
+    assert.equal(status, 200, path);
+    assert.equal(data.ok, true, path);
   }
-  const exp = await call('/api/admin/export-calendar', {
-    method: 'POST', body: { dept: 'red', schoolId: 'hirota' }, withCookie: false,
-  });
-  assert.equal(exp.status, 401);
 });
 
-await test('パスワードが違うとログインできない', async () => {
-  const { status, data } = await call('/api/admin/auth', {
-    method: 'POST', body: { dept: 'red', action: 'login', id: 'staff', password: 'wrong' },
-  });
-  assert.equal(status, 401);
-  assert.equal(data.ok, false);
-  assert.equal(cookies.size, 0);
-});
-
-await test('正しい資格情報でログインするとCookieが発行される', async () => {
-  const { status, data } = await call('/api/admin/auth', {
-    method: 'POST', body: { dept: 'red', action: 'login', id: 'staff', password: 'pw123' },
-  });
-  assert.equal(status, 200);
-  assert.equal(data.loggedIn, true);
-  assert.ok(cookies.has('admin_session_red'));
-  const session = await call('/api/admin/auth?dept=red');
-  assert.equal(session.data.loggedIn, true);
-});
-
-console.log('\n== 管理API(ログイン済み) ==');
 await test('GET /api/admin/slots が全枠を返す', async () => {
   setup([{ date: D1, time: '14:00' }]);
   const { data } = await call('/api/admin/slots?dept=red&schoolId=hirota');
@@ -338,13 +292,6 @@ await test('期間が逆ならJSONでエラーを返す', async () => {
   assert.match(data.error, /開始日が終了日より後/);
 });
 
-await test('ログアウトすると管理APIが再び401になる', async () => {
-  await call('/api/admin/auth', { method: 'POST', body: { dept: 'red', action: 'logout' } });
-  cookies.clear();
-  const { status } = await call('/api/admin/slots?dept=red&schoolId=hirota');
-  assert.equal(status, 401);
-});
-
 console.log('\n== 部門の分離 ==');
 await test('GET /api/departments が両部門を返す', async () => {
   setup();
@@ -375,70 +322,16 @@ await test('部門ごとに違う校舎・学年が返る', async () => {
   assert.ok(!chu.data.department.grades.includes('小学1年'));
 });
 
-await test('RED部門のログインでは中等部の管理APIを使えない', async () => {
-  setup();
-  cookies.clear();
-  // RED部門にログインする
-  const login = await call('/api/admin/auth', {
-    method: 'POST', body: { dept: 'red', action: 'login', id: 'staff', password: 'pw123' },
-  });
-  assert.equal(login.data.loggedIn, true);
-  // 自部門は使える
-  assert.equal((await call('/api/admin/slots?dept=red&schoolId=hirota')).status, 200);
-  // 中等部は401
-  const other = await call('/api/admin/slots?dept=chutobu&schoolId=chutobu_sasebo');
-  assert.equal(other.status, 401);
-  assert.equal(other.data.needLogin, true);
-  // 中等部のログイン状態も未ログインのまま
-  const session = await call('/api/admin/auth?dept=chutobu');
-  assert.equal(session.data.loggedIn, false);
-});
-
-await test('中等部には中等部のID・パスワードでログインする', async () => {
-  setup();
-  cookies.clear();
-  const wrong = await call('/api/admin/auth', {
-    method: 'POST', body: { dept: 'chutobu', action: 'login', id: 'staff', password: 'pw123' },
-  });
-  assert.equal(wrong.status, 401);
-  const ok = await call('/api/admin/auth', {
-    method: 'POST', body: { dept: 'chutobu', action: 'login', id: 'chu-staff', password: 'chu-pw123' },
-  });
-  assert.equal(ok.data.loggedIn, true);
-  assert.ok(cookies.has('admin_session_chutobu'));
-});
-
-await test('両部門に同時にログインしていられる', async () => {
-  setup();
-  cookies.clear();
-  await call('/api/admin/auth', {
-    method: 'POST', body: { dept: 'red', action: 'login', id: 'staff', password: 'pw123' },
-  });
-  await call('/api/admin/auth', {
-    method: 'POST', body: { dept: 'chutobu', action: 'login', id: 'chu-staff', password: 'chu-pw123' },
-  });
-  assert.equal((await call('/api/admin/auth?dept=red')).data.loggedIn, true);
-  assert.equal((await call('/api/admin/auth?dept=chutobu')).data.loggedIn, true);
-  // 片方からログアウトしても、もう片方は残る
-  await call('/api/admin/auth', { method: 'POST', body: { dept: 'red', action: 'logout' } });
-  assert.equal((await call('/api/admin/auth?dept=red')).data.loggedIn, false);
-  assert.equal((await call('/api/admin/auth?dept=chutobu')).data.loggedIn, true);
-});
-
-await test('中等部の職員は自部門の予約だけを見る', async () => {
+await test('中等部の管理画面は自部門の予約だけを見る', async () => {
   setup([], [
     { id: 'r1', school_id: 'hirota', date: D1, time: '14:00',
       child_name: 'RED生徒', parent_name: 'P', email: 'a@x.jp' },
     { id: 'c1', school_id: 'chutobu_sasebo', date: D1, time: '14:00',
       child_name: '中等部生徒', parent_name: 'P', email: 'a@x.jp' },
   ]);
-  cookies.clear();
-  await call('/api/admin/auth', {
-    method: 'POST', body: { dept: 'chutobu', action: 'login', id: 'chu-staff', password: 'chu-pw123' },
-  });
   const list = await call('/api/admin/bookings?dept=chutobu&schoolId=chutobu_sasebo');
   assert.deepEqual(list.data.bookings.map((b) => b.childName), ['中等部生徒']);
-  // RED部門の校舎IDを指定しても、中等部のログインでは見られない
+  // RED部門の校舎IDを指定しても、中等部の管理画面からは見られない
   const cross = await call('/api/admin/bookings?dept=chutobu&schoolId=hirota');
   assert.deepEqual(cross.data.bookings, []);
 });
@@ -454,65 +347,6 @@ await test('保護者も同じメールで部門ごとに分かれて見える',
   assert.deepEqual(red.data.bookings.map((b) => b.childName), ['RED生徒']);
   const chu = await call('/api/bookings?dept=chutobu&email=same%40x.jp');
   assert.deepEqual(chu.data.bookings.map((b) => b.childName), ['中等部生徒']);
-});
-
-console.log('\n== 智翔館アプリからの自動ログイン ==');
-function ssoToken(payload, secret = process.env.CHISHOKAN_SSO_SECRET) {
-  const encoded = Buffer.from(JSON.stringify(payload)).toString('base64url');
-  const sig = crypto.createHmac('sha256', secret).update(encoded).digest('base64url');
-  return `${encoded}.${sig}`;
-}
-async function ssoCall(query) {
-  const res = await fetch(`${base}/api/admin/sso?${query}`, { redirect: 'manual' });
-  const setCookie = res.headers.get('set-cookie');
-  if (setCookie) cookies.set(setCookie.split('=')[0], setCookie.split(';')[0]);
-  return { status: res.status, location: res.headers.get('location'), setCookie };
-}
-
-await test('正しいトークンならその部門にログインした状態で管理画面へ移る', async () => {
-  setup();
-  cookies.clear();
-  const now = Math.floor(Date.now() / 1000);
-  const token = ssoToken({ aud: 'interview-admin', dept: 'chutobu', name: '池田貴光', campus: '小中等部', iat: now, exp: now + 60 });
-  const r = await ssoCall(`token=${encodeURIComponent(token)}`);
-  assert.equal(r.status, 302);
-  assert.equal(r.location, '/chutobu/admin');
-  assert.equal((await call('/api/admin/auth?dept=chutobu')).data.loggedIn, true);
-  // 別部門にはログインしていない
-  assert.equal((await call('/api/admin/auth?dept=red')).data.loggedIn, false);
-});
-
-await test('ログイン状態の確認で智翔館アプリの URL を返す(未ログイン時の移動先)', async () => {
-  setup();
-  cookies.clear();
-  const { data } = await call('/api/admin/auth?dept=red');
-  assert.equal(data.loggedIn, false);
-  assert.equal(data.menuUrl, 'https://meeting-support.vercel.app');
-  process.env.MENU_APP_URL = 'https://menu.example.com/';
-  assert.equal((await call('/api/admin/auth?dept=red')).data.menuUrl, 'https://menu.example.com');
-  delete process.env.MENU_APP_URL;
-});
-
-await test('不正なトークンならログインさせず、ログイン画面へ戻す', async () => {
-  setup();
-  cookies.clear();
-  const now = Math.floor(Date.now() / 1000);
-  const token = ssoToken({ aud: 'interview-admin', dept: 'red', iat: now, exp: now + 60 }, 'wrong-secret-long-enough-for-signing');
-  const r = await ssoCall(`token=${encodeURIComponent(token)}&dept=red`);
-  assert.equal(r.status, 302);
-  assert.equal(r.location, '/red/admin?sso=failed');
-  assert.equal(r.setCookie, null);
-  assert.equal((await call('/api/admin/auth?dept=red')).data.loggedIn, false);
-});
-
-await test('存在しない部門のトークンは通らない', async () => {
-  setup();
-  cookies.clear();
-  const now = Math.floor(Date.now() / 1000);
-  const token = ssoToken({ aud: 'interview-admin', dept: 'nowhere', iat: now, exp: now + 60 });
-  const r = await ssoCall(`token=${encodeURIComponent(token)}`);
-  assert.equal(r.location, '/');
-  assert.equal(r.setCookie, null);
 });
 
 console.log('\n== Cron ==');

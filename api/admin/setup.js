@@ -15,7 +15,6 @@ import { notifyStaffNewBooking, sendReminders, diagnoseReminders } from '../../l
 import { mailerMode, mailQuota } from '../../lib/mailer.js';
 import { isLineWorksConfigured } from '../../lib/lineworks.js';
 import { todayStr, TIMEZONE } from '../../lib/format.js';
-import { requireAdmin } from '../../lib/auth.js';
 import {
   readJsonBody, withErrorHandling, methodNotAllowed, noStore, resolveDepartment,
 } from '../../lib/http.js';
@@ -130,7 +129,6 @@ export default withErrorHandling(async (req, res) => {
   if (req.method === 'GET') {
     const dept = await resolveDepartment(req, res);
     if (!dept) return;
-    if (!requireAdmin(req, res, dept.slug)) return;
     const schools = await listSchools(dept.slug, { includeInactive: true });
     return res.status(200).json({
       ok: true,
@@ -149,7 +147,6 @@ export default withErrorHandling(async (req, res) => {
   const body = await readJsonBody(req);
   const dept = await resolveDepartment(req, res, body);
   if (!dept) return;
-  if (!requireAdmin(req, res, dept.slug)) return;
 
   switch (body.action) {
     case 'saveNotify':

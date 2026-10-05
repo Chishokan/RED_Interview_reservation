@@ -3,7 +3,6 @@
  * 指定期間の予約を月カレンダー形式のExcelファイルにして返す。
  */
 import { exportCalendar } from '../../lib/calendar-export.js';
-import { requireAdmin } from '../../lib/auth.js';
 import {
   readJsonBody, withErrorHandling, methodNotAllowed, noStore, resolveDepartment,
 } from '../../lib/http.js';
@@ -14,7 +13,6 @@ export default withErrorHandling(async (req, res) => {
   const body = await readJsonBody(req);
   const dept = await resolveDepartment(req, res, body);
   if (!dept) return;
-  if (!requireAdmin(req, res, dept.slug)) return;
 
   const result = await exportCalendar({ ...body, dept: dept.slug });
   if (!result.ok) return res.status(200).json(result);
