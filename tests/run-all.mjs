@@ -9,8 +9,6 @@ import path from 'node:path';
 const dir = path.dirname(fileURLToPath(import.meta.url));
 const files = [
   'format.test.mjs',
-  'auth.test.mjs',
-  'sso.test.mjs',
   'store.test.mjs',
   'reminders.test.mjs',
   'mailer-gas.test.mjs',

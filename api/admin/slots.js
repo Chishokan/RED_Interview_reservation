@@ -13,7 +13,6 @@ import {
   adminDeleteSlot,
   adminDeleteSlots,
 } from '../../lib/store.js';
-import { requireAdmin } from '../../lib/auth.js';
 import {
   readJsonBody, withErrorHandling, methodNotAllowed, noStore, resolveDepartment,
 } from '../../lib/http.js';
@@ -24,7 +23,6 @@ export default withErrorHandling(async (req, res) => {
   if (req.method === 'GET') {
     const dept = await resolveDepartment(req, res);
     if (!dept) return;
-    if (!requireAdmin(req, res, dept.slug)) return;
     const schoolId = req.query.schoolId;
     if (!schoolId) return res.status(400).json({ ok: false, error: '校舎が指定されていません' });
     return res.status(200).json({
@@ -37,7 +35,6 @@ export default withErrorHandling(async (req, res) => {
     const body = await readJsonBody(req);
     const dept = await resolveDepartment(req, res, body);
     if (!dept) return;
-    if (!requireAdmin(req, res, dept.slug)) return;
     const payload = { ...body, dept: dept.slug };
 
     if (req.method === 'POST') {

@@ -3,6 +3,8 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
+<!-- ログインの仕組みが無いため、検索エンジンに載らないようにする -->
+<meta name="robots" content="noindex, nofollow">
 <title>面談予約 管理画面</title>
 <style>
   /* 部門ごとの基調色。読み込み時にJavaScriptが差し替える */
@@ -707,75 +709,14 @@
     white-space: pre-wrap; word-break: break-all;
     max-height: 420px; overflow-y: auto;
   }
-  /* ログイン画面 */
-  .login-overlay {
-    position: fixed; top: 0; left: 0; right: 0; bottom: 0;
-    background: linear-gradient(135deg, var(--accent-dark) 0%, var(--accent) 100%);
-    display: flex; align-items: center; justify-content: center;
-    z-index: 9999; padding: 20px;
-  }
-  .login-overlay.hidden { display: none; }
-  .login-box {
-    background: white; border-radius: 12px;
-    padding: 32px 28px; max-width: 380px; width: 100%;
-    box-shadow: 0 20px 60px rgba(0,0,0,0.3);
-  }
-  .login-box h2 {
-    font-size: 18px; font-weight: 700; color: #1a202c;
-    text-align: center; margin-bottom: 4px;
-  }
-  .login-box .login-sub {
-    font-size: 12px; color: #718096; text-align: center; margin-bottom: 20px;
-  }
-  .login-box .login-msg {
-    font-size: 13px; color: #4a5568; line-height: 1.7; margin-bottom: 16px;
-  }
-  .login-box .login-btn {
-    display: block; text-align: center; text-decoration: none;
-    width: 100%; padding: 12px; margin-top: 4px;
-    background: var(--accent); color: white; border: none;
-    border-radius: 6px; font-size: 14px; font-weight: 600;
-    cursor: pointer;
-  }
-  .login-box .login-btn:hover { background: var(--accent-dark); }
-  .login-box .login-error {
-    background: #fed7d7; color: #742a2a;
-    padding: 8px 12px; border-radius: 4px;
-    font-size: 12px; margin-bottom: 12px;
-    text-align: center; display: none;
-  }
-  .login-box .login-error.show { display: block; }
-  .login-box .login-icon {
-    text-align: center; font-size: 32px; margin-bottom: 8px;
-  }
-  .logout-btn {
-    background: rgba(255,255,255,0.2);
-    color: white; border: 1px solid rgba(255,255,255,0.4);
-    padding: 4px 10px; border-radius: 4px;
-    font-size: 11px; cursor: pointer;
-  }
-  .logout-btn:hover { background: rgba(255,255,255,0.3); }
 </style>
 </head>
 <body>
-
-<!-- 未ログインのときの案内(管理画面へは智翔館アプリのメニューから入る。IDとパスワードの入力画面は無い) -->
-<div class="login-overlay" id="loginOverlay">
-  <div class="login-box">
-    <div class="login-icon">🔒</div>
-    <h2>智翔館アプリから開いてください</h2>
-    <div class="login-sub" id="loginSub">面談予約システム 管理画面</div>
-    <div class="login-error" id="loginError"></div>
-    <p class="login-msg" id="loginMsg">智翔館アプリのメニューへ移動しています…</p>
-    <a class="login-btn" id="loginBtn" href="#">智翔館アプリのメニューを開く</a>
-  </div>
-</div>
 
 <header>
   <div class="header-inner">
     <h1 id="pageTitle">⚙️ 面談予約 管理画面</h1>
     <span class="badge" id="deptBadge">職員用</span>
-    <button class="logout-btn" id="logoutBtn">ログアウト</button>
   </div>
 </header>
 
@@ -1132,7 +1073,6 @@ let state = {
  * サーバーAPIの呼び出し。
  * GAS版の google.script.run を fetch に置き換えたもので、
  * 戻り値の形({ ok: true, ... } / { ok: false, error })は同じ。
- * セッション切れ(401)を受け取ったらログイン画面に戻す。
  */
 async function apiCall(funcName, payload) {
   const json = (method, body) => ({
@@ -1175,10 +1115,6 @@ async function apiCall(funcName, payload) {
   } catch (e) {
     throw new Error('サーバーからの応答を読み取れませんでした (HTTP ' + res.status + ')');
   }
-  if (res.status === 401 && data.needLogin) {
-    showLoginScreen('ログインの有効期限が切れました。下のボタンから開き直してください。');
-    throw new Error('セッションが切れました。智翔館アプリのメニューから開き直してください。');
-  }
   if (!res.ok && data.ok === undefined) {
     throw new Error(data.error || ('通信エラーが発生しました (HTTP ' + res.status + ')'));
   }
@@ -1206,8 +1142,6 @@ function applyDepartment(dept) {
   document.title = dept.name + ' 面談予約 管理画面';
   document.getElementById('pageTitle').textContent = '⚙️ ' + dept.name + ' 面談予約 管理画面';
   document.getElementById('deptBadge').textContent = dept.name + ' 職員用';
-  const sub = document.getElementById('loginSub');
-  if (sub) sub.textContent = dept.name + ' 面談予約システム 管理画面';
 }
 
 async function loadSchools() {
@@ -2268,89 +2202,21 @@ function isPast(dateStr, timeStr) {
   return d.getTime() < Date.now();
 }
 
-// ========== ログイン認証(サーバー側で検証) ==========
-let initialized = false;
-
-// 管理画面へは智翔館アプリのメニューから入る(自動ログイン。lib/sso.js)。
-// ログインしていなければ、智翔館アプリの /api/interview-sso に移る。そこで智翔館アプリの
-// ログインを確かめ、署名付きのトークンを付けてこの画面へ戻してくれる(未ログインなら先にログイン画面)。
-let menuUrl = '';
-
-function ssoStartUrl() {
-  return menuUrl + '/api/interview-sso?dept=' + encodeURIComponent(DEPT);
-}
-
+// ========== 起動 ==========
+// ログインの仕組みは無い。URL を開けば誰でも管理画面を使える。
 async function init() {
-  // サーバーにログイン状態を問い合わせる
+  // 部門名と基調色を反映する
   try {
-    const res = await fetch('/api/admin/auth?dept=' + encodeURIComponent(DEPT));
+    const res = await fetch('/api/departments');
     const data = await res.json();
-    if (data.department) applyDepartment(data.department);
-    if (data.menuUrl) menuUrl = data.menuUrl;
-    if (data.loggedIn) {
-      hideLoginScreen();
-      doInit();
-      return;
-    }
+    applyDepartment((data.departments || []).find(d => d.slug === DEPT));
   } catch (e) {
-    // 通信できない場合も案内を出す
+    // 部門名が取れなくても管理画面は使える
   }
-  const failed = new URLSearchParams(location.search).get('sso') === 'failed';
-  if (failed || !menuUrl) {
-    // 自動ログインに失敗して戻ってきたときは、行ったり来たりを繰り返さないよう案内だけ出す
-    showLoginScreen(failed
-      ? '自動ログインができませんでした。智翔館アプリにログインし直してから、メニューの「面談管理」を開いてください。'
-      : 'サーバーに接続できませんでした。時間をおいて開き直してください。');
-    return;
-  }
-  showLoginScreen();
-  location.replace(ssoStartUrl());
+  doInit();
 }
-
-/** 未ログインの案内を出す。error を渡すと赤字で表示し、自動では移動しない */
-function showLoginScreen(error) {
-  document.getElementById('loginOverlay').classList.remove('hidden');
-  const err = document.getElementById('loginError');
-  const msg = document.getElementById('loginMsg');
-  const btn = document.getElementById('loginBtn');
-  if (menuUrl) btn.href = ssoStartUrl();
-  btn.style.display = menuUrl ? '' : 'none';
-  if (error) {
-    err.textContent = error;
-    err.classList.add('show');
-    msg.textContent = 'この管理画面は、智翔館アプリのメニューの「面談管理」から開きます。';
-  }
-}
-
-function hideLoginScreen() {
-  document.getElementById('loginOverlay').classList.add('hidden');
-}
-
-async function handleLogout() {
-  if (!confirm('ログアウトしますか?')) return;
-  try {
-    await fetch('/api/admin/auth', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ dept: DEPT, action: 'logout' }),
-    });
-  } catch (e) {}
-  // そのまま再読み込みすると自動ログインで入り直してしまうので、智翔館アプリのメニューへ戻る
-  if (menuUrl) location.href = menuUrl + '/';
-  else location.reload();
-}
-
-// ログアウトボタンのイベント設定(scriptがbodyの末尾にあるので要素は既に存在)
-(function setupLoginEvents() {
-  const logoutBtn = document.getElementById('logoutBtn');
-  if (logoutBtn) logoutBtn.addEventListener('click', handleLogout);
-})();
 
 function doInit() {
-  // ログアウト→再ログインでイベントが二重登録されないようにする
-  if (initialized) { loadAll(); return; }
-  initialized = true;
-
   loadSchools();
   const today = new Date();
   const week = new Date();
@@ -2494,10 +2360,6 @@ async function handleExportRun() {
     const contentType = res.headers.get('content-type') || '';
     if (contentType.includes('application/json')) {
       const data = await res.json();
-      if (res.status === 401 && data.needLogin) {
-        showLoginScreen('ログインの有効期限が切れました。下のボタンから開き直してください。');
-        throw new Error('セッションが切れました。智翔館アプリのメニューから開き直してください。');
-      }
       throw new Error(data.error || '出力に失敗しました');
     }
     if (!res.ok) throw new Error('出力に失敗しました (HTTP ' + res.status + ')');
