@@ -482,6 +482,17 @@ await test('正しいトークンならその部門にログインした状態�
   assert.equal((await call('/api/admin/auth?dept=red')).data.loggedIn, false);
 });
 
+await test('ログイン状態の確認で智翔館アプリの URL を返す(未ログイン時の移動先)', async () => {
+  setup();
+  cookies.clear();
+  const { data } = await call('/api/admin/auth?dept=red');
+  assert.equal(data.loggedIn, false);
+  assert.equal(data.menuUrl, 'https://meeting-support.vercel.app');
+  process.env.MENU_APP_URL = 'https://menu.example.com/';
+  assert.equal((await call('/api/admin/auth?dept=red')).data.menuUrl, 'https://menu.example.com');
+  delete process.env.MENU_APP_URL;
+});
+
 await test('不正なトークンならログインさせず、ログイン画面へ戻す', async () => {
   setup();
   cookies.clear();

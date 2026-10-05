@@ -2,6 +2,9 @@
  * 管理画面の認証API(部門ごと)。
  *   GET  /api/admin/auth?dept=xxx   ログイン状態の確認
  *   POST /api/admin/auth            { dept, action: 'login', id, password } / { dept, action: 'logout' }
+ *
+ * ※管理画面にIDとパスワードの入力画面は無い(智翔館アプリのメニューから /api/admin/sso で入る)。
+ *   action: 'login' はテストと非常時のために残している。
  */
 import {
   verifyCredentials,
@@ -10,6 +13,7 @@ import {
   setSessionCookie,
   clearSessionCookie,
 } from '../../lib/auth.js';
+import { menuAppUrl } from '../../lib/sso.js';
 import {
   readJsonBody, withErrorHandling, methodNotAllowed, noStore, resolveDepartment,
 } from '../../lib/http.js';
@@ -23,6 +27,8 @@ export default withErrorHandling(async (req, res) => {
     return res.status(200).json({
       ok: true,
       loggedIn: isAuthenticated(req, dept.slug),
+      // 未ログインのとき管理画面はここ(智翔館アプリ)へ移って自動ログインしてくる
+      menuUrl: menuAppUrl(),
       department: { slug: dept.slug, name: dept.name, accentColor: dept.accent_color },
     });
   }
