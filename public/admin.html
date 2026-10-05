@@ -32,6 +32,29 @@
     background: #fef3c7; color: #744210; padding: 4px 10px;
     border-radius: 4px; font-size: 11px; font-weight: 600;
   }
+  header .header-right { display: flex; align-items: center; gap: 10px; }
+  .menu-btn {
+    background: rgba(255,255,255,0.2); color: white;
+    border: 1px solid rgba(255,255,255,0.4); border-radius: 4px;
+    padding: 4px 10px; font-size: 12px; text-decoration: none; white-space: nowrap;
+  }
+  .menu-btn:hover { background: rgba(255,255,255,0.3); }
+  /* 生徒・保護者に伝える予約画面のURL */
+  .parent-url {
+    background: #fffbeb; border: 1px solid #f6e05e; border-radius: 8px;
+    padding: 12px 16px; margin-bottom: 20px;
+    display: flex; align-items: center; gap: 10px; flex-wrap: wrap;
+  }
+  .parent-url-label { font-size: 13px; font-weight: 600; color: #744210; }
+  .parent-url-link {
+    font-size: 14px; font-weight: 600; color: var(--accent-dark);
+    word-break: break-all;
+  }
+  .parent-url button {
+    padding: 4px 12px; background: white; border: 1px solid #cbd5e0;
+    border-radius: 6px; cursor: pointer; font-size: 12px; color: #2d3748;
+  }
+  .parent-url button:hover { background: #edf2f7; }
   .school-bar { background: white; border-bottom: 1px solid #e2e8f0; padding: 12px 0; }
   .school-bar-inner {
     max-width: 1100px; margin: 0 auto; padding: 0 16px;
@@ -716,7 +739,10 @@
 <header>
   <div class="header-inner">
     <h1 id="pageTitle">⚙️ 面談予約 管理画面</h1>
-    <span class="badge" id="deptBadge">職員用</span>
+    <div class="header-right">
+      <span class="badge" id="deptBadge">職員用</span>
+      <a class="menu-btn" id="menuBtn" href="https://meeting-support.vercel.app/">← メニューに戻る</a>
+    </div>
   </div>
 </header>
 
@@ -729,6 +755,11 @@
 </div>
 
 <div class="container">
+  <div class="parent-url">
+    <span class="parent-url-label">📢 生徒・保護者へはこちらのURLを伝えてください:</span>
+    <a class="parent-url-link" id="parentUrl" href="#" target="_blank" rel="noopener"></a>
+    <button id="copyParentUrlBtn">📋 コピー</button>
+  </div>
   <div class="tabs">
     <button class="tab active" data-tab="bookings">📅 予約一覧</button>
     <button class="tab" data-tab="slots">➕ 枠の管理</button>
@@ -1027,6 +1058,22 @@ const DEPT = (() => {
   if (seg && !seg.endsWith('.html')) return seg.toLowerCase();
   return (new URLSearchParams(location.search).get('dept') || '').toLowerCase();
 })();
+// 生徒・保護者用の予約画面のURL(管理画面のURLから /admin を取ったもの)
+const PARENT_URL = location.origin + '/' + DEPT;
+(function showParentUrl() {
+  const link = document.getElementById('parentUrl');
+  link.href = PARENT_URL;
+  link.textContent = PARENT_URL;
+  document.getElementById('copyParentUrlBtn').addEventListener('click', async () => {
+    try {
+      await navigator.clipboard.writeText(PARENT_URL);
+      showToast('URLをコピーしました', 'success');
+    } catch (e) {
+      showToast('コピーできませんでした。URLを選択してコピーしてください', 'error');
+    }
+  });
+})();
+
 // 保存する値は部門ごとに分ける(別部門の校舎が復元されないようにするため)
 const LAST_SCHOOL_KEY = 'admin_last_school_' + DEPT;
 
