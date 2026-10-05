@@ -104,6 +104,7 @@ Supabaseの **Project Settings → API** で次の2つを確認します。
 | `ADMIN_ID_RED` / `ADMIN_PASSWORD_RED` 等 | 部門ごとの管理画面ログイン。部門別の値が無ければ `ADMIN_ID` / `ADMIN_PASSWORD` を使う |
 | `SESSION_SECRET` | ログインCookieの署名鍵。`openssl rand -base64 32` などで生成した長いランダムな文字列(24文字以上。どこかから取得する値ではなく、自分で作ります) |
 | `CRON_SECRET` | リマインドの定期実行を外部から勝手に叩かれないようにするトークン |
+| `CHISHOKAN_SSO_SECRET` | (任意)智翔館アプリのメニューから管理画面を開いたとき、IDとパスワードなしでログインさせるための共有の秘密鍵。智翔館アプリ(meeting_support)にも**同じ値**を設定する。24文字以上。未設定なら自動ログインは無効 |
 
 メール送信は `RESEND_API_KEY`(推奨)か、`SMTP_HOST` などのSMTP設定のどちらかを入れてください。
 **どちらも未設定の場合、メールは送信されずログに記録されるだけ**になります(予約自体は正常に動きます)。
@@ -197,6 +198,7 @@ api/                     Vercel のサーバーレス関数(REST API)
   bookings.js              GET/POST/PATCH/DELETE 予約(保護者向け)
   admin/
     auth.js                ログイン・ログアウト・状態確認
+    sso.js                 智翔館アプリのメニューからの自動ログイン
     slots.js               枠の一覧・追加・更新・削除(要ログイン)
     bookings.js            予約の一覧・更新・キャンセル(要ログイン)
     export-calendar.js     月カレンダーのExcel出力(要ログイン)

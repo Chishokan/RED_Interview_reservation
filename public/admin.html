@@ -2303,6 +2303,12 @@ async function init() {
   } catch (e) {
     // 通信できない場合もログイン画面を出す
   }
+  // 智翔館アプリのメニューからの自動ログインに失敗して戻ってきた場合
+  if (new URLSearchParams(location.search).get('sso') === 'failed') {
+    const err = document.getElementById('loginError');
+    err.textContent = 'メニューからの自動ログインができませんでした。IDとパスワードでログインしてください';
+    err.classList.add('show');
+  }
   showLoginScreen();
 }
 
